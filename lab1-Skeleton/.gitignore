@@ -1,3 +1,6 @@
 *.o
 *.a
 profsh
+*.layout
+*.cbp
+*.depend
