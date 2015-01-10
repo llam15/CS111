@@ -39,15 +39,21 @@
 		<Unit filename="lab1-Skeleton/command.h" />
 		<Unit filename="lab1-Skeleton/execute-command.c">
 			<Option compilerVar="CC" />
+			<Option compile="0" />
+			<Option link="0" />
 		</Unit>
 		<Unit filename="lab1-Skeleton/main.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lab1-Skeleton/print-command.c">
 			<Option compilerVar="CC" />
+			<Option compile="0" />
+			<Option link="0" />
 		</Unit>
 		<Unit filename="lab1-Skeleton/read-command.c">
 			<Option compilerVar="CC" />
+			<Option compile="0" />
+			<Option link="0" />
 		</Unit>
 		<Unit filename="lab1-Skeleton/tokenizer.c">
 			<Option compilerVar="CC" />

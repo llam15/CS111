@@ -4,9 +4,11 @@
 
 #include <stdint.h>
 
-typedef struct {
-  char** token_list;
-  uint64_t num_tokens;
+typedef struct
+{
+    char* token_buffer;
+    uint64_t* token_offsets;
+    uint64_t num_tokens;
 } Tokens_t;
 
 void lexer_init(void);
