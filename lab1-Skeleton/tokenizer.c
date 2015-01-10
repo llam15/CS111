@@ -28,7 +28,7 @@ void lexer_putchar_i(char c) {
       //Reallocate token_list if needed
       if (lexertokens.num_tokens == token_list_size) {
 	token_list_size *=2;
-	lexertokens.token_list = (char**) checked_realloc(sizeof(char*)*INIT_BUF_SIZE);
+	lexertokens.token_list = (char**) checked_realloc(lexertokens.token_list, sizeof(char*)*INIT_BUF_SIZE);
       }
       lexertokens.token_list[lexertokens.num_tokens++] = lexerbuf + last_token_index;
       last_token_index = buf_index + 1;
@@ -36,23 +36,23 @@ void lexer_putchar_i(char c) {
   }
 
   lexerbuf[buf_index++] = c;
-  
+
   //Reallocate lexerbuf if needed
   if (buf_index == buf_size) {
     buf_size*=2;
-    lexerbuf = (char*) checked_realloc(sizeof(char)*buf_size));
+    lexerbuf = (char*) checked_realloc(lexerbuf, sizeof(char)*buf_size));
   }
 }
 
 void lexer_putchar(char c) {
   static uint64_t buf_index = 0;
-  
+
   switch(c) {
   case ' ':
   case '\t':
     lexer_putchar_i('\0');
     break;
-  
+
   case '>':
   case '<':
   case '|':
@@ -68,7 +68,7 @@ void lexer_putchar(char c) {
     lexer_putchar_i(c);
     break;
   }
- 
+
 }
 
 void lexer_get_tokens(Tokens_t* tokens) {
