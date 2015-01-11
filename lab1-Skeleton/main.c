@@ -41,7 +41,7 @@ int main(void)
 
     for(i = 0; i < tokens.num_tokens; i++)
     {
-        printf("%s\n", tokens.token_offsets[i] + tokens.token_buffer);
+        printf("%s\n", tokens.tokens[i].offset + tokens.token_buffer);
     }
 
     ;
