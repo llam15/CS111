@@ -1,0 +1,22 @@
+Things to do:
+
+1. Fix tokenizer for commands. Current output:
+
+if cat 
+<
+ /etc/passwd 
+|
+ tr a-z A-Z 
+|
+ sort -u
+;
+ then :
+;
+ else echo sort failed!
+;
+ fi
+;
+
+2. Read through resulting list of tokens and create commands. Put into command_stream
+2a. Check syntax. (i.e. all if has fi, all while has done, no unmatched parens etc)
+2b. If syntax error, return line number

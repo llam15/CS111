@@ -88,10 +88,12 @@ void lexer_putchar(char c)
     {
     case ' ':
     case '\t':
-        if(lexertokens.tokens[lexertokens.num_tokens].type != TOKEN_COMMAND && is_reserved(lexerbuf + last_token_index, buf_index - last_token_index))
+        if (lexertokens.tokens[lexertokens.num_tokens].type != TOKEN_COMMAND && is_reserved(lexerbuf + last_token_index, buf_index - last_token_index))
             lexer_putchar_i('\0');
-        else
+        else {
             lexertokens.tokens[lexertokens.num_tokens].type = TOKEN_COMMAND;
+	    //	    lexer_putchar_i(c);
+	}
         break;
 
     case '>':
