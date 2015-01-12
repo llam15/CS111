@@ -2,6 +2,10 @@
 #include "alloc.h"
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <ctype.h>
 
 // String constants
 #define NUM_RESERVED_STRINGS 8
@@ -25,15 +29,16 @@ static char* lexerbuf;
 static Tokens_t lexertokens;
 static uint64_t buf_index = 0;
 static uint64_t last_token_index = 0;
+static uint64_t line_num = 1;
 
-bool is_reserved(const char* str, uint64_t strl)
+/*bool is_reserved(const char* str, uint64_t strl)
 {
     int i = 0;
     for(; i < NUM_RESERVED_STRINGS; i++)
         if(strlen(reserved_strings[i]) == strl && memcmp(str, reserved_strings[i], strl) == 0)
             return true;
     return false;
-}
+    }*/
 
 // Initialize the lexer
 void lexer_init(void)
@@ -88,25 +93,35 @@ void lexer_putchar(char c)
     {
     case ' ':
     case '\t':
-        if(lexertokens.tokens[lexertokens.num_tokens].type != TOKEN_COMMAND && is_reserved(lexerbuf + last_token_index, buf_index - last_token_index))
+      /*        if (lexertokens.tokens[lexertokens.num_tokens].type != TOKEN_COMMAND && is_reserved(lexerbuf + last_token_index, buf_index - last_token_index))
             lexer_putchar_i('\0');
-        else
+        else {
             lexertokens.tokens[lexertokens.num_tokens].type = TOKEN_COMMAND;
+	    lexer_putchar_i(c);
+	    }*/
+      lexer_putchar_i('\0');
         break;
 
+    case '\n':
+      line_num++;
     case '>':
     case '<':
     case '|':
     case ';':
-    case '\n':
     case '(':
     case ')':
         lexer_putchar_i('\0');
-        lexer_putchar_i((c == '\n')?';':c);
+        lexer_putchar_i(c);
         lexer_putchar_i('\0');
         break;
     default:
+      if (isalnum(c) || strchr("!%+,-./:@^_", c))
         lexer_putchar_i(c);
+      else {
+	fprintf(stderr, "%llu: Syntax error: `%c' is not valid.\n", (unsigned long long) line_num, c);
+	exit(1);
+      }
+	
         break;
     }
 

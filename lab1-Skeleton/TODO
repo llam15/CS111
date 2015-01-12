@@ -1,0 +1,31 @@
+Things to do:
+
+1a. Fix tokenizer for commands. Current output:
+
+if cat 
+<
+ /etc/passwd 
+|
+ tr a-z A-Z 
+|
+ sort -u
+;
+ then :
+;
+ else echo sort failed!
+;
+ fi
+;
+
+1b. Tokenize comments. read up to but does not consume newline
+
+2. Read through resulting list of tokens and create commands. Put into
+command_stream 
+
+2a. Check syntax. (i.e. all if has fi, all while has done, no
+unmatched parens etc) 
+
+2aa. Newline syntax: Check token after newline 2b. If
+syntax error, return line number
+
+3. read_command_stream: return next command in array
