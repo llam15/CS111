@@ -30,7 +30,7 @@ int main(void)
 {
     lexer_init();
 
-    int i = 0;
+    size_t i = 0;
     for(; i < strlen(testline); i++)
     {
         lexer_putchar(testline[i]);

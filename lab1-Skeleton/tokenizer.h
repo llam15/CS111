@@ -4,15 +4,15 @@
 
 #include <stdint.h>
 
-typedef enum
+/*typedef enum
     {
         TOKEN_COMMAND,
         TOKEN_OTHER
     }Token_type_e;
-
+*/
 typedef struct
 {
-    Token_type_e type;
+  //    Token_type_e type;
     uint64_t offset;
 } Token_t;
 
