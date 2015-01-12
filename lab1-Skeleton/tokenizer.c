@@ -124,6 +124,8 @@ void lexer_putchar_i(char c)
             //Assign its type
             lexer_assign_type(lexertokens.tokens + lexertokens.num_tokens);
 
+	    lexertokens.tokens[lexertokens.num_tokens].line_num = line_num;
+
             lexertokens.num_tokens++;
 
             last_token_index = buf_index + 1;

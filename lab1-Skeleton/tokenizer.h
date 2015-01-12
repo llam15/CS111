@@ -10,8 +10,9 @@ typedef enum {TOK_IF, TOK_THEN, TOK_FI, TOK_ELSE, TOK_WHILE, TOK_UNTIL,
 
 typedef struct
 {
-    Token_type type;
-    uint64_t offset;
+  Token_type type;
+  uint64_t offset;
+  uint64_t line_num;
 } Token_t;
 
 typedef struct
