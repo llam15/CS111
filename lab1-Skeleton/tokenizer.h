@@ -4,9 +4,9 @@
 
 #include <stdint.h>
 
-typedef enum {TOK_IF, TOK_THEN, TOK_FI, TOK_ELSE, TOK_WHILE, TOK_UNTIL, 
-	      TOK_DO, TOK_DONE, TOK_WORD, TOK_SC, TOK_PIPE, TOK_LPAREN, 
-	      TOK_RPAREN, TOK_LAB, TOK_RAB} Token_type;
+typedef enum {TOK_IF, TOK_THEN, TOK_FI, TOK_ELSE, TOK_WHILE, TOK_UNTIL,
+	      TOK_DO, TOK_DONE, TOK_WORD, TOK_SC, TOK_PIPE, TOK_LPAREN,
+	      TOK_RPAREN, TOK_LAB, TOK_RAB, TOK_NL, TOK_COL} Token_type;
 
 typedef struct
 {
@@ -19,13 +19,13 @@ typedef struct
     char* token_buffer;
     Token_t* tokens;
     uint64_t num_tokens;
-} Tokens_t;
+} TokenList_t;
 
 void lexer_init(void);
 
 void lexer_putchar(char c);
 
-void lexer_get_tokens(Tokens_t* tokens);
+void lexer_get_tokens(TokenList_t* tokens);
 #endif //_TOKENIZER_h_
 
 

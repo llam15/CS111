@@ -36,12 +36,12 @@ int main(void)
         lexer_putchar(testline[i]);
     }
 
-    Tokens_t tokens;
+    TokenList_t tokens;
     lexer_get_tokens(&tokens);
 
     for(i = 0; i < tokens.num_tokens; i++)
     {
-        printf("%s\n", tokens.tokens[i].offset + tokens.token_buffer);
+        printf("%s, %d\n", tokens.tokens[i].offset + tokens.token_buffer, tokens.tokens[i].type);
     }
 
     ;

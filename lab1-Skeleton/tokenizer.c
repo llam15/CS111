@@ -22,11 +22,40 @@ const char* const reserved_strings[] =
     "done"
 };
 
+typedef struct
+{
+    Token_type type;
+    const char * str;
+} TokenAssoc_t;
+
+// NOTE: the association list does not include "TOK_WORD" as that is the default case
+#define NUM_TOKEN_ASSOC 16
+
+const TokenAssoc_t const TokAssociations[] =
+{
+    {TOK_IF, "if"},
+    {TOK_THEN, "then"},
+    {TOK_FI, "fi"},
+    {TOK_ELSE, "else"},
+    {TOK_WHILE, "while"},
+    {TOK_UNTIL, "until"},
+    {TOK_DO, "do"},
+    {TOK_DONE, "done"},
+    {TOK_SC, ";"},
+    {TOK_PIPE, "|"},
+    {TOK_LPAREN, "("},
+    {TOK_RPAREN, ")"},
+    {TOK_LAB, "<"},
+    {TOK_RAB, ">"},
+    {TOK_NL, "\n"},
+    {TOK_COL, ":"},
+};
+
 // Buffer declaration and initial size
 #define INIT_BUF_SIZE 64
 
 static char* lexerbuf;
-static Tokens_t lexertokens;
+static TokenList_t lexertokens;
 static uint64_t buf_index = 0;
 static uint64_t last_token_index = 0;
 static uint64_t line_num = 1;
@@ -47,6 +76,21 @@ void lexer_init(void)
     lexerbuf = (char*) checked_malloc(sizeof(char)*INIT_BUF_SIZE);
     lexertokens.tokens = (Token_t*) checked_malloc(sizeof(Token_t)*INIT_BUF_SIZE);
     lexertokens.num_tokens = 0;
+}
+
+void lexer_assign_type(Token_t* tok)
+{
+    size_t i;
+    tok->type = TOK_WORD;
+
+    for(i = 0; i < NUM_TOKEN_ASSOC; i++)
+    {
+        if(strcmp(TokAssociations[i].str, lexerbuf + tok->offset) == 0) // FIX DIS SHIT NEED LENGTHS FOR REASONS
+        {
+            tok->type = TokAssociations[i].type;
+            return;
+        }
+    }
 }
 
 // Internal putchar function which resizes buffers if necessary
@@ -71,12 +115,26 @@ void lexer_putchar_i(char c)
                 tokens_count *= 2;
                 lexertokens.tokens = (Token_t*) checked_realloc(lexertokens.tokens, sizeof(Token_t)*tokens_count);
             }
-            lexertokens.tokens[lexertokens.num_tokens++].offset = last_token_index;
+
+            lexerbuf[buf_index] = '\0';
+
+            //Set params on the just-finished token
+            lexertokens.tokens[lexertokens.num_tokens].offset = last_token_index;
+
+            //Assign its type
+            lexer_assign_type(lexertokens.tokens + lexertokens.num_tokens);
+
+            lexertokens.num_tokens++;
+
             last_token_index = buf_index + 1;
+
+            buf_index++;
         }
     }
-
-    lexerbuf[buf_index++] = c;
+    else
+    {
+        lexerbuf[buf_index++] = c;
+    }
 
     //Reallocate lexerbuf if needed
     if (buf_index == buf_size)
@@ -93,17 +151,17 @@ void lexer_putchar(char c)
     {
     case ' ':
     case '\t':
-      /*        if (lexertokens.tokens[lexertokens.num_tokens].type != TOKEN_COMMAND && is_reserved(lexerbuf + last_token_index, buf_index - last_token_index))
-            lexer_putchar_i('\0');
-        else {
-            lexertokens.tokens[lexertokens.num_tokens].type = TOKEN_COMMAND;
-	    lexer_putchar_i(c);
-	    }*/
-      lexer_putchar_i('\0');
+        /*        if (lexertokens.tokens[lexertokens.num_tokens].type != TOKEN_COMMAND && is_reserved(lexerbuf + last_token_index, buf_index - last_token_index))
+              lexer_putchar_i('\0');
+          else {
+              lexertokens.tokens[lexertokens.num_tokens].type = TOKEN_COMMAND;
+          lexer_putchar_i(c);
+          }*/
+        lexer_putchar_i('\0');
         break;
 
     case '\n':
-      line_num++;
+        line_num++;
     case '>':
     case '<':
     case '|':
@@ -115,19 +173,20 @@ void lexer_putchar(char c)
         lexer_putchar_i('\0');
         break;
     default:
-      if (isalnum(c) || strchr("!%+,-./:@^_", c))
-        lexer_putchar_i(c);
-      else {
-	fprintf(stderr, "%llu: Syntax error: `%c' is not valid.\n", (unsigned long long) line_num, c);
-	exit(1);
-      }
-	
+        if (isalnum(c) || strchr("!%+,-./:@^_", c))
+            lexer_putchar_i(c);
+        else
+        {
+            fprintf(stderr, "%llu: Syntax error: `%c' is not valid.\n", (unsigned long long) line_num, c);
+            exit(1);
+        }
+
         break;
     }
 
 }
 
-void lexer_get_tokens(Tokens_t* tokens)
+void lexer_get_tokens(TokenList_t* tokens)
 {
     tokens->token_buffer = lexerbuf;
     tokens->tokens = lexertokens.tokens;
