@@ -4,15 +4,13 @@
 
 #include <stdint.h>
 
-/*typedef enum
-    {
-        TOKEN_COMMAND,
-        TOKEN_OTHER
-    }Token_type_e;
-*/
+typedef enum {TOK_IF, TOK_THEN, TOK_FI, TOK_ELSE, TOK_WHILE, TOK_UNTIL, 
+	      TOK_DO, TOK_DONE, TOK_WORD, TOK_SC, TOK_PIPE, TOK_LPAREN, 
+	      TOK_RPAREN, TOK_LAB, TOK_RAB} Token_type;
+
 typedef struct
 {
-  //    Token_type_e type;
+    Token_type type;
     uint64_t offset;
 } Token_t;
 
