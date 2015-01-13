@@ -7,8 +7,12 @@
 static Token_t* g_tok_list;
 static uint64_t g_tok_index;
 static uint64_t g_tok_list_len;
-static command_t root;
-static command_t cur_node;
+
+typedef struct
+{
+command_t root;
+command_t cur_node;
+} tree_context;
 
 static uint64_t line_num;
 
@@ -30,7 +34,7 @@ bool getTok(void)
 }
 
 //Note: Make sure that parent and child are both malloc'd
-void insert_child(command_t parent, command_t child)
+void insert_child(command_t parent, command_t child, tree_context * context)
 {
   uint8_t num_children = 0;
   switch(parent->type) {
@@ -71,14 +75,14 @@ void insert_child(command_t parent, command_t child)
 }
 
 // Note: returns the newly created node
-command_t insert_node(command_type type)
+command_t insert_node(command_type type, tree_context * context)
 {
-  
+
     command_t node = (command_t) checked_malloc(sizeof(command));
     node->type = type;
     if (root == NULL)
       root = node;
-    
+
     if(cur_node != NULL)
     {
       insert_child(cur_node, node);
@@ -88,31 +92,46 @@ command_t insert_node(command_type type)
     return node;
 }
 
-void shell()
+void shell_inner(tree_context * context)
 {
   line_num = g_tok_list[g_tok_index].line_num;
   switch (g_tok_list[g_tok_index].type) {
   case TOK_IF:
-    insert_node(IF_COMMAND);
+    insert_node(IF_COMMAND, context);
     break;
   case TOK_PIPE:
-    insert_node(PIPE_COMMAND);
+    insert_node(PIPE_COMMAND, context);
     break;
   case TOK_SC:
-    insert_node(SEQUENCE_COMMAND);
+    // Create a new tree context to hold the branch
+    tree_context inner_context;
+
+    // Add the new node to the supertree
+    inner_context.cur_node = inner_context.root = insert_node(SEQUENCE_COMMAND, context);
+
+    // Call shell_inner() recursively, passing the subtree context
+    shell_inner(&inner_context);
     break;
   case TOK_WORD:
-    insert_node(SIMPLE_COMMAND);
+    insert_node(SIMPLE_COMMAND, context);
     break;
   case TOK_LPAREN:
-    insert_node(SUBSHELL_COMMAND);
+    insert_node(SUBSHELL_COMMAND, context);
     break;
   case TOK_UNTIL:
-    insert_node(UNTIL_COMMAND);
+    insert_node(UNTIL_COMMAND, context);
     break;
   case TOK_WHILE:
-    insert_node(WHILE_COMMAND);
-    break;  
+    insert_node(WHILE_COMMAND, context);
+    break;
   }
 
+}
+
+void shell()
+{
+    tree_context initial_context;
+    initial_context.cur_node = initial_context.root = NULL;
+
+    shell_inner(&initial_context);
 }
