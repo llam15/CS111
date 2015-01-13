@@ -6,7 +6,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-void parse(Token_t* tok_list, uint64_t tok_list_len, command_stream_t parsed_commands);
+// Pass in TokenList_t instead of all of its members duh
+void parse(Token_t* tok_list, const char* tok_buffer, uint64_t tok_list_len, command_t* ret_tree);
 
 bool getTok(void);
 

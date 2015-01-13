@@ -19,6 +19,9 @@
 
 #ifdef TEST
 #include "tokenizer.h"
+#include "parser.h"
+#include "command-internals.h"
+#include "command.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -51,7 +54,9 @@ int main(void)
         printf("%s, %d\n", strToPrint, tokens.tokens[i].type);
     }
 
-    parse(tokens.tokens, tokens.num_tokens);
+    command_t parse_tree;
+
+    parse(tokens.tokens, tokens.token_buffer, tokens.num_tokens, &parse_tree);
 }
 
 #else
