@@ -15,6 +15,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#ifndef _COMMAND_H_
+#define _COMMAND_H_
+
+#include "command-internals.h"
+
 typedef struct command *command_t;
 typedef struct command_stream *command_stream_t;
 
@@ -44,3 +49,5 @@ void execute_command (command_t, int);
 /* Return the exit status of a command, which must have previously
    been executed.  Wait for the command, if it is not already finished.  */
 int command_status (command_t);
+
+#endif // _COMMAND_H_
