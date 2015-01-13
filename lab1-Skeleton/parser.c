@@ -20,13 +20,13 @@ typedef struct
 
 static uint64_t line_num;
 
-void parse(Token_t* tok_list, const char* tok_buffer, uint64_t tok_list_len)
+void parse(Token_t* tok_list, const char* tok_buffer, uint64_t tok_list_len, command_stream_t parsed_commands)
 {
     g_tok_buffer = tok_buffer;
     g_tok_index = 0;
     g_tok_list = tok_list;
     g_tok_list_len = tok_list_len;
-    shell();
+    parsed_commands->command_tree = shell();
 }
 
 bool getTok(void)
@@ -268,12 +268,14 @@ void shell_inner(tree_context * context)
     while(!getTok());
 }
 
-void shell()
+command_t shell()
 {
     // Create an initial context; this is the root of all trees in the recursive structure
-    tree_context initial_context;
-    initial_context.cur_node = initial_context.root = NULL;
+    tree_context* initial_context = (tree_context*)checked_malloc(sizeof(tree_context));
+    initial_context->cur_node = initial_context->root = NULL;
 
     // Call shell_inner
-    shell_inner(&initial_context);
+    shell_inner(initial_context);
+
+    return initial_context;
 }
