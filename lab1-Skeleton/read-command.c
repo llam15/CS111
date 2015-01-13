@@ -18,7 +18,8 @@
 #include "command.h"
 #include "command-internals.h"
 
-#include <error.h>
+#include "error.h"
+#include "alloc.h"
 
 /* FIXME: You may need to add #include directives, macro definitions,
    static function definitions, etc.  */
@@ -26,6 +27,7 @@
 #include "tokenizer.h"
 #include "parser.h"
 #include <stdbool.h>
+#include <stdio.h>
 
 /* FIXME: Define the type 'struct command_stream' here.  This should
    complete the incomplete type declaration in command.h.  */
@@ -46,17 +48,17 @@ make_command_stream (int (*get_next_byte) (void *),
   // Initialize lexer and tokenize input
   lexer_init();
   char c;
-  while (c = (char)get_next_byte(get_next_byte_argument) != EOF) {
+  while ((c = (char)get_next_byte(get_next_byte_argument)) != EOF) {
     lexer_putchar(c);
   }
 
   TokenList_t tokens;
   lexer_get_tokens(&tokens);
-  
-  // Parse tokens into commands
-  command_stream_t parsed_commands = (command_stream_t) checked_malloc(sizeof(command_stream));
 
-  parse(&tokens, tokens.num_tokens, parsed_commands);
+  // Parse tokens into commands
+  command_stream_t parsed_commands = (command_stream_t) checked_malloc(sizeof(struct command_stream));
+
+  parse(tokens.tokens, tokens.token_buffer, tokens.num_tokens, parsed_commands->command_tree);
   printed = false;
   //  error (1, 0, "command reading not yet implemented");
   return parsed_commands;
