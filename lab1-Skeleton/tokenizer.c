@@ -124,7 +124,7 @@ void lexer_putchar_i(char c)
             //Assign its type
             lexer_assign_type(lexertokens.tokens + lexertokens.num_tokens);
 
-	    lexertokens.tokens[lexertokens.num_tokens].line_num = line_num;
+            lexertokens.tokens[lexertokens.num_tokens].line_num = line_num;
 
             lexertokens.num_tokens++;
 
@@ -148,20 +148,24 @@ void lexer_putchar_i(char c)
 
 void lexer_putchar(char c)
 {
+    static bool consume_switch = false;
+    static char last_c = '\0';
+
+    // return to caller whilst consuming (comments?) until a newline
+    if(consume_switch)
+    {
+        if(c == '\n')
+            consume_switch = false;
+        else
+            return;
+    }
 
     switch(c)
     {
     case ' ':
     case '\t':
-        /*        if (lexertokens.tokens[lexertokens.num_tokens].type != TOKEN_COMMAND && is_reserved(lexerbuf + last_token_index, buf_index - last_token_index))
-              lexer_putchar_i('\0');
-          else {
-              lexertokens.tokens[lexertokens.num_tokens].type = TOKEN_COMMAND;
-          lexer_putchar_i(c);
-          }*/
         lexer_putchar_i('\0');
         break;
-
     case '\n':
         line_num++;
     case '>':
@@ -173,6 +177,11 @@ void lexer_putchar(char c)
         lexer_putchar_i('\0');
         lexer_putchar_i(c);
         lexer_putchar_i('\0');
+        break;
+    // Comment character
+    case '#':
+        if(strchr(" \t\n;|()", last_c))
+            consume_switch = true;
         break;
     default:
         if (isalnum(c) || strchr("!%+,-./:@^_", c))
@@ -186,6 +195,7 @@ void lexer_putchar(char c)
         break;
     }
 
+    last_c = c;
 }
 
 void lexer_get_tokens(TokenList_t* tokens)
