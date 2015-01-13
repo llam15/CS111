@@ -15,7 +15,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-enum command_type
+#ifndef _COMMAND_INTERNALS_H_
+#define _COMMAND_INTERNALS_H_
+
+#include <stdint.h>
+
+typedef enum
   {
     IF_COMMAND,		 // if A then B else C fi
     PIPE_COMMAND,        // A | B
@@ -24,12 +29,12 @@ enum command_type
     SUBSHELL_COMMAND,    // ( A )
     UNTIL_COMMAND,	 // until A do B done
     WHILE_COMMAND,	 // while A do B done
-  };
+  } command_type;
 
 // Data associated with a command.
 struct command
 {
-  enum command_type type;
+  command_type type;
 
   // Exit status, or -1 if not known (e.g., because it has not exited yet).
   int status;
@@ -37,6 +42,9 @@ struct command
   // I/O redirections, or null if none.
   char *input;
   char *output;
+
+  uint64_t n_words;
+  uint64_t word_index;
 
   union
   {
@@ -48,3 +56,5 @@ struct command
     struct command *command[3];
   } u;
 };
+
+#endif // _COMMAND_INTERNALS_H_
