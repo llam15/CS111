@@ -103,20 +103,21 @@ void shell_inner(tree_context * context)
     insert_node(PIPE_COMMAND, context);
     break;
   case TOK_SC:
-    // Create a new tree context to hold the branch
-    tree_context inner_context;
-
-    // Add the new node to the supertree
-    inner_context.cur_node = inner_context.root = insert_node(SEQUENCE_COMMAND, context);
-
-    // Call shell_inner() recursively, passing the subtree context
-    shell_inner(&inner_context);
+    insert_node(SEQUENCE_COMMAND, context);
     break;
   case TOK_WORD:
     insert_node(SIMPLE_COMMAND, context);
     break;
   case TOK_LPAREN:
-    insert_node(SUBSHELL_COMMAND, context);
+    // Create a new tree context to hold the branch
+    tree_context inner_context;
+
+    // Add the new node to the supertree
+    inner_context.cur_node = inner_context.root = insert_node(SUBSHELL_COMMAND, context);
+
+    // Call shell_inner() recursively, passing the subtree context
+    shell_inner(&inner_context);
+
     break;
   case TOK_UNTIL:
     insert_node(UNTIL_COMMAND, context);
