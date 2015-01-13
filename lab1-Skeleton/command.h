@@ -20,6 +20,9 @@
 
 #include "command-internals.h"
 
+extern struct command;
+extern struct command_stream;
+
 typedef struct command *command_t;
 typedef struct command_stream *command_stream_t;
 
