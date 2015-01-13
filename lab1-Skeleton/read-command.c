@@ -23,8 +23,17 @@
 /* FIXME: You may need to add #include directives, macro definitions,
    static function definitions, etc.  */
 
+#include "tokenizer.h"
+#include "parser.h"
+#include <stdbool.h>
+
 /* FIXME: Define the type 'struct command_stream' here.  This should
    complete the incomplete type declaration in command.h.  */
+
+struct command_stream {
+  command_t command_tree;
+};
+static bool printed;
 
 command_stream_t
 make_command_stream (int (*get_next_byte) (void *),
@@ -33,14 +42,36 @@ make_command_stream (int (*get_next_byte) (void *),
   /* FIXME: Replace this with your implementation.  You may need to
      add auxiliary functions and otherwise modify the source code.
      You can also use external functions defined in the GNU C Library.  */
-  error (1, 0, "command reading not yet implemented");
-  return 0;
+
+  // Initialize lexer and tokenize input
+  lexer_init();
+  char c;
+  while (c = (char)get_next_byte(get_next_byte_argument) != EOF) {
+    lexer_putchar(c);
+  }
+
+  TokenList_t tokens;
+  lexer_get_tokens(&tokens);
+  
+  // Parse tokens into commands
+  command_stream_t parsed_commands = (command_stream_t) checked_malloc(sizeof(command_stream));
+
+  parse(&tokens, tokens.num_tokens, parsed_commands);
+  printed = false;
+  //  error (1, 0, "command reading not yet implemented");
+  return parsed_commands;
 }
 
 command_t
 read_command_stream (command_stream_t s)
 {
   /* FIXME: Replace this with your implementation too.  */
-  error (1, 0, "command reading not yet implemented");
-  return 0;
+
+  if (!printed) {
+    return s->command_tree;
+    printed = true;
+  }
+
+  //  error (1, 0, "command reading not yet implemented");
+  return NULL;
 }
