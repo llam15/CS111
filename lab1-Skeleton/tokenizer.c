@@ -101,8 +101,8 @@ void lexer_putchar_i(char c)
 
     if (c == '\0')
     {
-        // If there was a null byte before this one, ignore it
-        if(buf_index >= 1 && lexerbuf[buf_index-1] == '\0')
+        // If there was a null byte before this one, ignore it; additionally, ignore leading null bytes
+        if(buf_index >= 1 && lexerbuf[buf_index-1] == '\0' || buf_index == 0)
         {
             return;
         }
