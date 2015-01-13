@@ -24,7 +24,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-char * testline = "if cat < /etc/passwd | tr a-z A-Z | sort -u; then :; else echo sort failed!; fi\n";
+char * testline = "if cat < /etc/passwd | tr a-z A-Z | sort -u; then :; else echo sort failed!; fi\n|#this is a comment!\n | ( ) if then else\n";
 
 int main(void)
 {
@@ -41,7 +41,12 @@ int main(void)
 
     for(i = 0; i < tokens.num_tokens; i++)
     {
-        printf("%s, %d\n", tokens.tokens[i].offset + tokens.token_buffer, tokens.tokens[i].type);
+        char * strToPrint = tokens.tokens[i].offset + tokens.token_buffer;
+        if(strncmp(strToPrint, "\n", 1) == 0)
+        {
+                strToPrint = "\\n";
+        }
+        printf("%s, %d\n", strToPrint, tokens.tokens[i].type);
     }
 
     ;
