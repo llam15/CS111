@@ -58,7 +58,7 @@ make_command_stream (int (*get_next_byte) (void *),
   // Parse tokens into commands
   command_stream_t parsed_commands = (command_stream_t) checked_malloc(sizeof(struct command_stream));
 
-  parse(tokens.tokens, tokens.token_buffer, tokens.num_tokens, parsed_commands->command_tree);
+  parse(tokens.tokens, tokens.token_buffer, tokens.num_tokens, &(parsed_commands->command_tree));
   printed = false;
   //  error (1, 0, "command reading not yet implemented");
   return parsed_commands;
