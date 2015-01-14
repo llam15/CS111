@@ -40,11 +40,12 @@ PROFSH_SOURCES = \
   main.c \
   read-command.c \
   print-command.c \
-  tokenizer.c
+  tokenizer.c \
+  parser.c
 PROFSH_OBJECTS = $(subst .c,.o,$(PROFSH_SOURCES))
 
 DIST_SOURCES = \
-  $(PROFSH_SOURCES) tokenizer.h alloc.h command.h command-internals.h Makefile \
+  $(PROFSH_SOURCES) parser.h tokenizer.h alloc.h command.h command-internals.h Makefile \
   $(TESTS) check-dist COPYING README
 
 profsh: $(PROFSH_OBJECTS)
