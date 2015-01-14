@@ -4,6 +4,7 @@
 #include "parser.h"
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define DEFAULT_WORD_NUM (4)
 
@@ -35,7 +36,8 @@ void parse(Token_t* tok_list, const char* tok_buffer, uint64_t tok_list_len, com
 // Moves the read index forward, and returns true on end of token list
 bool getTok(void)
 {
-    if (g_tok_index++ == g_tok_list_len)
+  //** CHANGED G_TOK_LIST_LEN TO G_TOK_LIST_LEN-1
+    if (g_tok_index++ >= g_tok_list_len-1)
         return true;
     return false;
 }
@@ -73,7 +75,7 @@ int8_t insert_child(command_t parent, command_t child)
 
     if (num_children == 0)
     {
-        fprintf(stderr, "%llu: Syntax Error: Token nesting not supported for command num %d\n", line_num, parent->type);
+      fprintf(stderr, "%llu: Syntax Error: Token nesting not supported for command num %d\n", (unsigned long long) line_num, parent->type);
         return -1;
     }
 
@@ -88,8 +90,35 @@ int8_t insert_child(command_t parent, command_t child)
         }
     }
 
-    fprintf(stderr, "%llu: Syntax Error: Too many child tokens following command num %d\n", line_num, parent->type);
+    fprintf(stderr, "%llu: Syntax Error: Too many child tokens following command num %d\n", (unsigned long long) line_num, parent->type);
     return -2;
+}
+
+// Attach another word to the end of the words pointer list on a simple_command
+void simple_append_word(command_t simple_command, char* word)
+{
+    if(simple_command->type != SIMPLE_COMMAND)
+    {
+      fprintf(stderr, "%llu: Internal error: attempt to append %s to non-simple command\n", (unsigned long long) line_num, word);
+        return;
+    }
+    // If the word index overruns the buffer, attempt to reallocate
+    if(simple_command->word_index == simple_command->n_words)
+    {
+        // Expand the buffer exponentially by two
+        simple_command->n_words *= 2;
+        // Checked-realloc (allocate one extra spot for a terminating null pointer)
+        simple_command->u.word = (char**)checked_realloc(simple_command->u.word, sizeof(char*) * (simple_command->n_words + 1));
+
+        // Initialize newly allocated pointers to NULL
+        int i;
+        for(i = simple_command->word_index + 1; i < (simple_command->n_words + 1); i++)
+        {
+            simple_command->u.word[i] = NULL;
+        }
+    }
+    // Put the word at the next position
+    simple_command->u.word[simple_command->word_index++] = word;
 }
 
 // Malloc/construct a new node, setting all child pointers to NULL in preparation for child insertion
@@ -116,9 +145,11 @@ command_t construct_node(command_type type)
         ret->word_index = 0;
         ret->u.word = (char**)checked_malloc(sizeof(char*) * (ret->n_words + 1));
 
+	//**ADDED SELF AS FIRST WORD
+	simple_append_word(ret, g_tok_buffer + g_tok_list[g_tok_index].offset);
         // Initialize newly allocated pointers to NULL
         int i;
-        for(i = 0; i < (ret->n_words + 1); i++)
+        for(i = 1; i < (ret->n_words + 1); i++)
         {
             ret->u.word[i] = NULL;
         }
@@ -126,32 +157,6 @@ command_t construct_node(command_type type)
     return ret;
 }
 
-// Attach another word to the end of the words pointer list on a simple_command
-void simple_append_word(command_t simple_command, char* word)
-{
-    if(simple_command->type != SIMPLE_COMMAND)
-    {
-        fprintf(stderr, "%llu: Internal error: attempt to append %s to non-simple command\n", line_num, word);
-        return;
-    }
-    // If the word index overruns the buffer, attempt to reallocate
-    if(simple_command->word_index == simple_command->n_words)
-    {
-        // Expand the buffer exponentially by two
-        simple_command->n_words *= 2;
-        // Checked-realloc (allocate one extra spot for a terminating null pointer)
-        simple_command->u.word = (char**)checked_realloc(simple_command->u.word, sizeof(char*) * (simple_command->n_words + 1));
-
-        // Initialize newly allocated pointers to NULL
-        int i;
-        for(i = simple_command->word_index + 1; i < (simple_command->n_words + 1); i++)
-        {
-            simple_command->u.word[i] = NULL;
-        }
-    }
-    // Put the word at the next position
-    simple_command->u.word[simple_command->word_index++] = word;
-}
 
 // Note: returns the newly created node
 uint8_t insert_node(command_type type, tree_context * context, command_t* ret_command)
@@ -165,7 +170,9 @@ uint8_t insert_node(command_type type, tree_context * context, command_t* ret_co
 
     if(context->cur_node != NULL)
     {
-        rval = insert_child(context->cur_node, node);
+
+      //** CHANGED CONTEXT->CUR_NODE TO CONTEXT->ROOT
+        rval = insert_child(context->root, node);
         if(rval < 0)
             exit(rval);
 
@@ -179,17 +186,20 @@ uint8_t insert_node(command_type type, tree_context * context, command_t* ret_co
 void shell_inner(tree_context * context)
 {
     static uint8_t insertion_index = 0;
+
     do
     {
         // Create a new tree context to hold the branch
         tree_context inner_context;
         command_t temp_root = NULL;
+	inner_context.root = inner_context.cur_node = NULL;
 
         // Update the line number
         line_num = g_tok_list[g_tok_index].line_num;
 
         // If the parent node is a SIMPLE_COMMAND
-        if(context->root->type == SIMPLE_COMMAND)
+	//** ADDED CHECK FOR NULL
+        if(context->root != NULL && context->root->type == SIMPLE_COMMAND)
         {
             // Only a few special tokens will break out of the SIMPLE_COMMAND argument list
             switch(g_tok_list[g_tok_index].type)
@@ -211,29 +221,35 @@ void shell_inner(tree_context * context)
         }
         else
         {
+
             // Switch on the current token's type
             switch (g_tok_list[g_tok_index].type)
             {
             case TOK_IF:
+	      //**CHANGED SUBSHELL->IF
                 // Add the new node to the supertree; maintain insertion index
-                insertion_index = insert_node(SUBSHELL_COMMAND, context, &inner_context.root);
+
+                insertion_index = insert_node(IF_COMMAND, context, &inner_context.root);
+
                 inner_context.cur_node = inner_context.root;
 
                 // Call shell_inner() recursively, passing the subtree context
-                shell_inner(&inner_context);
+		if(getTok())
+		  return;
+		shell_inner(&inner_context);
                 break;
             case TOK_THEN:
                 // If the root (parent) node type is not IF_COMMAND, or if a TOK_THEN has already been seen
                 if(context->root->type != IF_COMMAND || insertion_index != 0)
                 {
-                    fprintf(stderr, "%llu: Syntax error: unexpected `then'\n", line_num);
+		  fprintf(stderr, "%llu: Syntax error: unexpected `then'\n", (unsigned long long) line_num);
                     exit(-1);
                 }
                 break;
             case TOK_FI:
                 if(context->root->type != IF_COMMAND || insertion_index == 0)
                 {
-                    fprintf(stderr, "%llu: Syntax error: unexpected `fi'\n", line_num);
+		  fprintf(stderr, "%llu: Syntax error: unexpected `fi'\n", (unsigned long long) line_num);
                     exit(-1);
                 }
                 // Pop!
@@ -243,7 +259,7 @@ void shell_inner(tree_context * context)
                 // If the root (parent) node type is not IF_COMMAND, or if a TOK_THEN has already been seen
                 if(context->root->type != IF_COMMAND || insertion_index != 1)
                 {
-                    fprintf(stderr, "%llu: Syntax error: unexpected `then'\n", line_num);
+		  fprintf(stderr, "%llu: Syntax error: unexpected `then'\n", (unsigned long long) line_num);
                     exit(-1);
                 }
                 break;
@@ -253,6 +269,8 @@ void shell_inner(tree_context * context)
                 inner_context.cur_node = inner_context.root;
 
                 // Call shell_inner() recursively, passing the subtree context
+		if(getTok())
+		  return;
                 shell_inner(&inner_context);
                 break;
             case TOK_UNTIL:
@@ -261,18 +279,20 @@ void shell_inner(tree_context * context)
                 inner_context.cur_node = inner_context.root;
 
                 // Call shell_inner() recursively, passing the subtree context
+		if(getTok())
+		  return;
                 shell_inner(&inner_context);
                 break;
             case TOK_DO:
                 if(context->root->type != WHILE_COMMAND || context->root->type != UNTIL_COMMAND || insertion_index != 0)
                 {
-                    fprintf(stderr, "%llu: Syntax error: unexpected `do'\n", line_num);
+		  fprintf(stderr, "%llu: Syntax error: unexpected `do'\n", (unsigned long long) line_num);
                 }
                 break;
             case TOK_DONE:
                 if(context->root->type != WHILE_COMMAND || context->root->type != UNTIL_COMMAND || insertion_index != 1)
                 {
-                    fprintf(stderr, "%llu: Syntax error: unexpected `done'\n", line_num);
+		  fprintf(stderr, "%llu: Syntax error: unexpected `done'\n", (unsigned long long) line_num);
                     exit(-1);
                 }
                 // Pop!
@@ -284,11 +304,17 @@ void shell_inner(tree_context * context)
                 inner_context.cur_node = inner_context.root;
 
                 // Call shell_inner() recursively, passing the subtree context
+		if(getTok())
+		  return;
                 shell_inner(&inner_context);
                 break;
             case TOK_SC:
             case TOK_PIPE:
             case TOK_NL:
+	        //** IF LAST TOKEN, DON'T SPLIT!
+	        if(g_tok_index == g_tok_list_len-1)
+		  return;
+	      
                 // Store the old root temporarily so tree can be reordered
                 temp_root = context->root;
 
@@ -311,13 +337,16 @@ void shell_inner(tree_context * context)
                 }
                 inner_context.cur_node = inner_context.root;
 
-                // Insert the whole tree that used to be located at context->root (now at temp_root) under the new sequence command. Should end up being inserted at the zeroth index.
+                // Insert the whole tree that used to be located at context->root (now at temp_root) under the new sequence command. 
+		// Should end up being inserted at the zeroth index.
                 if(insert_child(inner_context.root, temp_root) != 0)
                 {
-                    fprintf(stderr, "%llu: Internal error: %s token has incorrect number of children.\n", str_type,line_num);
+		  fprintf(stderr, "%llu: Internal error: %s token has incorrect number of children.\n", (unsigned long long) line_num, str_type);
                 }
 
                 // Call shell_inner() recursively, passing the subtree context
+		if(getTok())
+		  return;
                 shell_inner(&inner_context);
                 break;
             case TOK_LPAREN:
@@ -337,8 +366,7 @@ void shell_inner(tree_context * context)
                 break;
             }
         }
-    }
-    while(!getTok());
+    } while(!getTok());
 }
 
 command_t shell()
@@ -350,5 +378,6 @@ command_t shell()
     // Call shell_inner
     shell_inner(initial_context);
 
-    return initial_context;
+    //**CHANGED INITIAL_CONTEXT TO INITIAL_CONTEXT->ROOT
+    return initial_context->root;
 }
