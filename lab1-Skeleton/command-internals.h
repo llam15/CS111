@@ -45,6 +45,7 @@ struct command
 
   uint64_t n_words;
   uint64_t word_index;
+  int child_index;
 
   union
   {
