@@ -4,13 +4,15 @@
 #include "parser.h"
 #include <stdint.h>
 #include <stdio.h>
+#include <inttypes.h>
+#include <stdlib.h>
 
 #define DEFAULT_WORD_NUM (4)
 
 static Token_t* g_tok_list;
 static uint64_t g_tok_index;
 static uint64_t g_tok_list_len;
-static const char* g_tok_buffer;
+static char* g_tok_buffer;
 
 // A tree. Used to store the head of a recursively-traversed section of the command tree
 typedef struct
@@ -23,7 +25,7 @@ typedef struct
 static uint64_t line_num;
 
 // Parse a token list and store the generated command tree into parsed_commands->command_tree
-void parse(Token_t* tok_list, const char* tok_buffer, uint64_t tok_list_len, command_t* ret_tree)
+void parse(Token_t* tok_list, char* tok_buffer, uint64_t tok_list_len, command_t* ret_tree)
 {
     g_tok_buffer = tok_buffer;
     g_tok_index = 0;
@@ -35,8 +37,9 @@ void parse(Token_t* tok_list, const char* tok_buffer, uint64_t tok_list_len, com
 // Moves the read index forward, and returns true on end of token list
 bool getTok(void)
 {
-    if (g_tok_index++ == g_tok_list_len)
+    if (g_tok_index == g_tok_list_len)
         return true;
+    g_tok_index++;
     return false;
 }
 
@@ -73,7 +76,7 @@ int8_t insert_child(command_t parent, command_t child)
 
     if (num_children == 0)
     {
-        fprintf(stderr, "%llu: Syntax Error: Token nesting not supported for command num %d\n", line_num, parent->type);
+        fprintf(stderr, "%"PRIu64": Syntax Error: Token nesting not supported for command num %d\n", line_num, parent->type);
         return -1;
     }
 
@@ -88,7 +91,7 @@ int8_t insert_child(command_t parent, command_t child)
         }
     }
 
-    fprintf(stderr, "%llu: Syntax Error: Too many child tokens following command num %d\n", line_num, parent->type);
+    fprintf(stderr, "%"PRIu64": Syntax Error: Too many child tokens following command num %d\n", line_num, parent->type);
     return -2;
 }
 
@@ -131,7 +134,7 @@ void simple_append_word(command_t simple_command, char* word)
 {
     if(simple_command->type != SIMPLE_COMMAND)
     {
-        fprintf(stderr, "%llu: Internal error: attempt to append %s to non-simple command\n", line_num, word);
+        fprintf(stderr, "%"PRIu64": Internal error: attempt to append %s to non-simple command\n", line_num, word);
         return;
     }
     // If the word index overruns the buffer, attempt to reallocate
@@ -178,8 +181,9 @@ uint8_t insert_node(command_type type, tree_context * context, command_t* ret_co
 
 void shell_inner(tree_context * context)
 {
+    printf("shell_inner: tree_context =\t%"PRIu64"\t%"PRIu64"\n", (uint64_t)context, (uint64_t)context->root);
     static uint8_t insertion_index = 0;
-    do
+    while(!getTok())
     {
         // Create a new tree context to hold the branch
         tree_context inner_context;
@@ -226,14 +230,14 @@ void shell_inner(tree_context * context)
                 // If the root (parent) node type is not IF_COMMAND, or if a TOK_THEN has already been seen
                 if(context->root->type != IF_COMMAND || insertion_index != 0)
                 {
-                    fprintf(stderr, "%llu: Syntax error: unexpected `then'\n", line_num);
+                    fprintf(stderr, "%"PRIu64": Syntax error: unexpected `then'\n", line_num);
                     exit(-1);
                 }
                 break;
             case TOK_FI:
                 if(context->root->type != IF_COMMAND || insertion_index == 0)
                 {
-                    fprintf(stderr, "%llu: Syntax error: unexpected `fi'\n", line_num);
+                    fprintf(stderr, "%"PRIu64": Syntax error: unexpected `fi'\n", line_num);
                     exit(-1);
                 }
                 // Pop!
@@ -243,7 +247,7 @@ void shell_inner(tree_context * context)
                 // If the root (parent) node type is not IF_COMMAND, or if a TOK_THEN has already been seen
                 if(context->root->type != IF_COMMAND || insertion_index != 1)
                 {
-                    fprintf(stderr, "%llu: Syntax error: unexpected `then'\n", line_num);
+                    fprintf(stderr, "%"PRIu64": Syntax error: unexpected `then'\n", line_num);
                     exit(-1);
                 }
                 break;
@@ -266,13 +270,13 @@ void shell_inner(tree_context * context)
             case TOK_DO:
                 if(context->root->type != WHILE_COMMAND || context->root->type != UNTIL_COMMAND || insertion_index != 0)
                 {
-                    fprintf(stderr, "%llu: Syntax error: unexpected `do'\n", line_num);
+                    fprintf(stderr, "%"PRIu64": Syntax error: unexpected `do'\n", line_num);
                 }
                 break;
             case TOK_DONE:
                 if(context->root->type != WHILE_COMMAND || context->root->type != UNTIL_COMMAND || insertion_index != 1)
                 {
-                    fprintf(stderr, "%llu: Syntax error: unexpected `done'\n", line_num);
+                    fprintf(stderr, "%"PRIu64": Syntax error: unexpected `done'\n", line_num);
                     exit(-1);
                 }
                 // Pop!
@@ -314,7 +318,7 @@ void shell_inner(tree_context * context)
                 // Insert the whole tree that used to be located at context->root (now at temp_root) under the new sequence command. Should end up being inserted at the zeroth index.
                 if(insert_child(inner_context.root, temp_root) != 0)
                 {
-                    fprintf(stderr, "%llu: Internal error: %s token has incorrect number of children.\n", str_type,line_num);
+                    fprintf(stderr, "%"PRIu64": Internal error: %s token has incorrect number of children.\n", line_num, str_type);
                 }
 
                 // Call shell_inner() recursively, passing the subtree context
@@ -338,17 +342,21 @@ void shell_inner(tree_context * context)
             }
         }
     }
-    while(!getTok());
+
 }
 
 command_t shell()
 {
     // Create an initial context; this is the root of all trees in the recursive structure
     tree_context* initial_context = (tree_context*)checked_malloc(sizeof(tree_context));
-    initial_context->cur_node = initial_context->root = NULL;
+    initial_context->cur_node = initial_context->root = construct_node(SUBSHELL_COMMAND);
 
     // Call shell_inner
     shell_inner(initial_context);
 
-    return initial_context;
+    command_t ret = initial_context->root->u.command[0];
+
+    free(initial_context->root);
+
+    return ret;
 }

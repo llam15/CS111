@@ -7,7 +7,7 @@
 #include <stdbool.h>
 
 // Pass in TokenList_t instead of all of its members duh
-void parse(Token_t* tok_list, const char* tok_buffer, uint64_t tok_list_len, command_t* ret_tree);
+void parse(Token_t* tok_list, char* tok_buffer, uint64_t tok_list_len, command_t* ret_tree);
 
 bool getTok(void);
 

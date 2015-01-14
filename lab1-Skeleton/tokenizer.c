@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <inttypes.h>
 
 // String constants
 #define NUM_RESERVED_STRINGS 8
@@ -102,7 +103,7 @@ void lexer_putchar_i(char c)
     if (c == '\0')
     {
         // If there was a null byte before this one, ignore it; additionally, ignore leading null bytes
-        if(buf_index >= 1 && lexerbuf[buf_index-1] == '\0' || buf_index == 0)
+        if(((buf_index >= 1) && (lexerbuf[buf_index-1] == '\0')) || buf_index == 0)
         {
             return;
         }
@@ -188,7 +189,7 @@ void lexer_putchar(char c)
             lexer_putchar_i(c);
         else
         {
-            fprintf(stderr, "%llu: Syntax error: `%c' is not valid.\n", (unsigned long long) line_num, c);
+            fprintf(stderr, "%"PRIu64": Syntax error: `%c\' is not valid.\n", (unsigned long long) line_num, c);
             exit(1);
         }
 

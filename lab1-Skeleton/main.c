@@ -57,6 +57,10 @@ int main(void)
     command_t parse_tree;
 
     parse(tokens.tokens, tokens.token_buffer, tokens.num_tokens, &parse_tree);
+
+    print_command(parse_tree);
+
+    return 0;
 }
 
 #else
