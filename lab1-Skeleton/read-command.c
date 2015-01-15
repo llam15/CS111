@@ -52,7 +52,7 @@ make_command_stream (int (*get_next_byte) (void *),
   while ((c = (char)get_next_byte(get_next_byte_argument)) != EOF) {
     lexer_putchar(c);
   }
-
+  lexer_putchar('\0');
   TokenList_t token_list;
   lexer_get_tokens(&token_list);
 

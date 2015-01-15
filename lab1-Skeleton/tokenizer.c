@@ -64,14 +64,21 @@ static uint64_t line_num = 1;
 static int is_command = 0;
 static bool simple_command = false;
 
-bool is_reserved(const char* str, uint64_t strl)
+bool is_reserved(Token_t tok)
 {
-    int i = 0;
-    for(; i < NUM_RESERVED_STRINGS; i++)
-        if(strlen(reserved_strings[i]) == strl && memcmp(str, reserved_strings[i], strl) == 0)
-            return true;
+  switch(tok.type) {
+  case TOK_WHILE:
+  case TOK_UNTIL:
+  case TOK_IF:
+  case TOK_LPAREN:
+  case TOK_THEN:
+  case TOK_DO:
+  case TOK_NL:
+    return true;
+  default: 
     return false;
-    }
+  }
+}
 
 // Initialize the lexer
 void lexer_init(void)
@@ -205,11 +212,13 @@ void lexer_putchar(char c)
         line_num++;
 	lexer_putchar_i('\0');
         simple_command = false;
-	if (strchr("\n(|\0", last_c) || is_reserved(lexerbuf+last_token_index, buf_index-last_token_index))
+	if (strchr("\n(|\0", last_c) || is_reserved(lexertokens.tokens[lexertokens.num_tokens-1]))
 	    break;
 
-        if (is_command > 0){
-	    c = ';';
+	if (is_command > 0 && !is_reserved(lexertokens.tokens[lexertokens.num_tokens-1])) {
+	  lexer_putchar_i(';');
+	  lexer_putchar_i('\0');
+	  break;
 	}
     case '|':
     case ';':
