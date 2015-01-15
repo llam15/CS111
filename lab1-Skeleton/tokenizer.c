@@ -62,14 +62,14 @@ static uint64_t last_token_index = 0;
 static uint64_t line_num = 1;
 static int is_command = 0;
 
-/*bool is_reserved(const char* str, uint64_t strl)
+bool is_reserved(const char* str, uint64_t strl)
 {
     int i = 0;
     for(; i < NUM_RESERVED_STRINGS; i++)
         if(strlen(reserved_strings[i]) == strl && memcmp(str, reserved_strings[i], strl) == 0)
             return true;
     return false;
-    }*/
+    }
 
 // Initialize the lexer
 void lexer_init(void)
@@ -185,9 +185,14 @@ void lexer_putchar(char c)
         lexer_putchar_i('\0');
         break;
     case '\n':
-      if (is_command > 0)
-	c = ';';
         line_num++;
+	if (is_reserved(lexerbuf+last_token_index, buf_index-last_token_index))
+	    break;
+
+        if (is_command > 0 && !strchr("\n(><|\0", last_c)){
+	    c = ';';
+	}
+	
     case '>':
     case '<':
     case '|':
@@ -208,7 +213,7 @@ void lexer_putchar(char c)
             lexer_putchar_i(c);
         else
         {
-            fprintf(stderr, "%"PRIu64": Syntax error: `%c\' is not valid.\n", (unsigned long long) line_num, c);
+            fprintf(stderr, "%"PRIu64": Syntax error: `%c\' is not valid.\n",  line_num, c);
             exit(1);
         }
 
