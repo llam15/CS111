@@ -11,10 +11,9 @@
 #define DEFAULT_WORD_NUM (4)
 
 static Token_t* g_tok_list;
-static uint64_t g_tok_index;
-static uint64_t g_tok_list_len;
+static int64_t g_tok_index;
+static int64_t g_tok_list_len;
 static char* g_tok_buffer;
-static bool simple_word;
 static int if_depth;
 
 // A tree. Used to store the head of a recursively-traversed section of the command tree
@@ -31,9 +30,8 @@ static uint64_t line_num;
 void parse(Token_t* tok_list, char* tok_buffer, uint64_t tok_list_len, command_t* ret_tree)
 {
     if_depth = 0;
-    simple_word = false;
     g_tok_buffer = tok_buffer;
-    g_tok_index = 0;
+    g_tok_index = -1;
     g_tok_list = tok_list;
     g_tok_list_len = tok_list_len;
     *ret_tree = shell();
@@ -42,7 +40,7 @@ void parse(Token_t* tok_list, char* tok_buffer, uint64_t tok_list_len, command_t
 // Moves the read index forward, and returns true on end of token list
 bool getTok(void)
 {
-  //** CHANGED G_TOK_LIST_LEN TO G_TOK_LIST_LEN-1
+    //** CHANGED G_TOK_LIST_LEN TO G_TOK_LIST_LEN-1
     if (g_tok_index++ >= g_tok_list_len-1)
         return true;
     return false;
@@ -81,7 +79,7 @@ int8_t insert_child(command_t parent, command_t child)
 
     if (num_children == 0)
     {
-      fprintf(stderr, "%"PRIu64": Syntax Error: Token nesting not supported for command num %d\n", line_num, parent->type);
+        fprintf(stderr, "%"PRIu64": Syntax Error: Token nesting not supported for command num %d\n", line_num, parent->type);
         return -1;
     }
 
@@ -133,6 +131,9 @@ command_t construct_node(command_type type)
     // checked malloc the actual command struct
     command_t ret = (command_t) checked_malloc(sizeof(struct command));
 
+    ret->input = NULL;
+    ret->output = NULL;
+
     // initialize the type
     ret->type = type;
     if(type != SIMPLE_COMMAND)
@@ -151,8 +152,8 @@ command_t construct_node(command_type type)
         ret->word_index = 0;
         ret->u.word = (char**)checked_malloc(sizeof(char*) * (ret->n_words + 1));
 
-	//**ADDED SELF AS FIRST WORD
-	simple_append_word(ret, g_tok_buffer + g_tok_list[g_tok_index].offset);
+        //**ADDED SELF AS FIRST WORD
+        simple_append_word(ret, g_tok_buffer + g_tok_list[g_tok_index].offset);
         // Initialize newly allocated pointers to NULL
         int i;
         for(i = 1; i < (ret->n_words + 1); i++)
@@ -177,7 +178,7 @@ uint8_t insert_node(command_type type, tree_context * context, command_t* ret_co
     if(context->cur_node != NULL)
     {
 
-      //** CHANGED CONTEXT->CUR_NODE TO CONTEXT->ROOT
+        //** CHANGED CONTEXT->CUR_NODE TO CONTEXT->ROOT
         context->root->child_index = insert_child(context->root, node);
         if(context->root->child_index < 0)
             exit(context->root->child_index);
@@ -189,24 +190,34 @@ uint8_t insert_node(command_type type, tree_context * context, command_t* ret_co
     return context->root->child_index;
 }
 
+static int entry_count = 0;
+
 void shell_inner(tree_context * context)
 {
+    printf("shell_inner: %d\n", ++entry_count);
+
+    int loop_count = 0;
     //static
 
-    do
+    while((++g_tok_index) < g_tok_list_len)
     {
+
+        printf("shell_inner: %d; %d: token=%s\n",
+               entry_count,
+               loop_count++,
+               g_tok_buffer + g_tok_list[g_tok_index].offset);
         // Create a new tree context to hold the branch
         tree_context inner_context;
 //        uint8_t insertion_index = 0;
         command_t temp_node = NULL;
-	inner_context.root = inner_context.cur_node = NULL;
+        inner_context.root = inner_context.cur_node = NULL;
 
         // Update the line number
         line_num = g_tok_list[g_tok_index].line_num;
 
         // If the parent node is a SIMPLE_COMMAND
-	//** ADDED CHECK FOR NULL
-        if(simple_word)
+        //** ADDED CHECK FOR NULL
+        if(context->root != NULL && context->root->type == SIMPLE_COMMAND)
         {
             // Only a few special tokens will break out of the SIMPLE_COMMAND argument list
             switch(g_tok_list[g_tok_index].type)
@@ -218,14 +229,12 @@ void shell_inner(tree_context * context)
             case TOK_RPAREN:
             case TOK_LAB:
             case TOK_RAB:
-                simple_word = false;
-                g_tok_index--;
                 return;
                 break;
             default:
                 // For every regular token, append it as text arguments to the parent SIMPLE_COMMAND
                 simple_append_word(context->root, g_tok_buffer + g_tok_list[g_tok_index].offset);
-                break;
+                continue;
             }
         }
         else
@@ -239,13 +248,13 @@ void shell_inner(tree_context * context)
                 // Add the new node to the supertree; maintain insertion index
                 if_depth++;
                 //insertion_index =
-                    insert_node(IF_COMMAND, context, &inner_context.root);
+                insert_node(IF_COMMAND, context, &inner_context.root);
 
                 inner_context.cur_node = inner_context.root;
 
                 // Call shell_inner() recursively, passing the subtree context
-                if(getTok())
-                  return;
+//                if(getTok())
+//                  return;
                 shell_inner(&inner_context);
                 break;
             case TOK_THEN:
@@ -277,23 +286,23 @@ void shell_inner(tree_context * context)
             case TOK_WHILE:
                 // Add the new node to the supertree; maintain insertion index
 //                insertion_index =
-                    insert_node(WHILE_COMMAND, context, &inner_context.root);
+                insert_node(WHILE_COMMAND, context, &inner_context.root);
                 inner_context.cur_node = inner_context.root;
 
                 // Call shell_inner() recursively, passing the subtree context
-                if(getTok())
-                  return;
+//                if(getTok())
+//                  return;
                 shell_inner(&inner_context);
                 break;
             case TOK_UNTIL:
                 // Add the new node to the supertree; maintain insertion index
 //                insertion_index =
-                    insert_node(UNTIL_COMMAND, context, &inner_context.root);
+                insert_node(UNTIL_COMMAND, context, &inner_context.root);
                 inner_context.cur_node = inner_context.root;
 
                 // Call shell_inner() recursively, passing the subtree context
-                if(getTok())
-                  return;
+//                if(getTok())
+//                  return;
                 shell_inner(&inner_context);
                 break;
             case TOK_DO:
@@ -315,36 +324,37 @@ void shell_inner(tree_context * context)
             case TOK_WORD:
                 // Add the new node to the supertree; maintain insertion index
 //                insertion_index =
-                    insert_node(SIMPLE_COMMAND, context, &inner_context.root);
+                insert_node(SIMPLE_COMMAND, context, &inner_context.root);
                 inner_context.cur_node = inner_context.root;
-                simple_word = true;
                 // Call shell_inner() recursively, passing the subtree context
-                if(getTok())
-                  return;
+//                if(getTok())
+//                  return;
                 shell_inner(&inner_context);
                 break;
-	    case TOK_NL:
-	        break;
+            case TOK_NL:
+                break;
 
             case TOK_SC:
-                    if (if_depth > 0) {
-                        return;
-                    }
+                if (if_depth > 0)
+                {
+                    return;
+                }
             case TOK_PIPE:
                 //** IF LAST TOKEN, DON'T SPLIT!
                 if(g_tok_index == g_tok_list_len-1)
-                  return;
-	      
+                    return;
+
                 // Store the old root temporarily so tree can be reordered
                 temp_node = context->cur_node;
 
-                if (context->root->type == SIMPLE_COMMAND){
+                if (context->root->type == SIMPLE_COMMAND)
+                {
                     temp_node = context->root;
                     context->root = context->cur_node = NULL;
                 }
                 else
                     context->root->u.command[context->root->child_index]= NULL;
-                
+
                 char* str_type = "Unknown linking";
                 if(g_tok_list[g_tok_index].type == TOK_SC)
                 {
@@ -358,7 +368,7 @@ void shell_inner(tree_context * context)
 //                    insertion_index =
                     insert_node(PIPE_COMMAND, context, &inner_context.root);
                 }
-                    
+
                 //THIS WILL BE REMOVED AFTER FIX TOKENIZER
                 if(g_tok_list[g_tok_index].type == TOK_NL)
                 {
@@ -368,7 +378,7 @@ void shell_inner(tree_context * context)
                 }
                 inner_context.cur_node = inner_context.root;
 
-                // Insert the whole tree that used to be located at context->root (now at temp_root) under the new sequence command. 
+                // Insert the whole tree that used to be located at context->root (now at temp_root) under the new sequence command.
                 // Should end up being inserted at the zeroth index.
                 if(insert_child(inner_context.cur_node, temp_node) != 0)
                 {
@@ -376,8 +386,8 @@ void shell_inner(tree_context * context)
                 }
 
                 // Call shell_inner() recursively, passing the subtree context
-                if(getTok())
-                  return;
+//                if(getTok())
+//                  return;
                 shell_inner(&inner_context);
                 break;
             case TOK_LPAREN:
@@ -400,7 +410,7 @@ void shell_inner(tree_context * context)
 //        if (g_tok_index >= g_tok_list_len-1) {
 //            context->root = inner_context.root;
 //        }
-    } while(!getTok());
+    }
 }
 
 command_t shell()
