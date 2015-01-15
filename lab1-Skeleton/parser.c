@@ -149,7 +149,7 @@ command_t magical_if_parser(Token_t* token_list, int start, int end) {
 	  break;
 	}
       }
-      else {
+      //      else {
 	switch(token_list[index].type) {
 	case TOK_FI:
 	case TOK_RPAREN:
@@ -165,7 +165,7 @@ command_t magical_if_parser(Token_t* token_list, int start, int end) {
 	default:
 	  break;
 	}
-      }
+	//      }
     } while (index++ < end);
 
  DONE_WITH_SCAN:
@@ -222,7 +222,7 @@ command_t magical_while_until_parser(Token_t* token_list, int start, int end) {
 	do_index = index;
       }
     }  
-    else {
+    //    else {
       switch(token_list[index].type) {
       case TOK_FI:
       case TOK_RPAREN:
@@ -238,7 +238,7 @@ command_t magical_while_until_parser(Token_t* token_list, int start, int end) {
       default:
 	break;
       }
-     }
+      //}
   } while(index++ < end);
 
   if (done_index == -1) {
@@ -337,8 +337,8 @@ void add_redirects(Token_t* token_list, command_t comm, int start, int end) {
   else if (token_list[start].type == TOK_RAB && end > start+1) {
     comm->output = g_tokens_list->token_buffer+token_list[start+1].offset;
   }
-  //  else
-  // error(1, 0, "%"PRIu64": Syntax error: Unexpected token while redirecting\n",token_list[start].line_num);
+    else
+      error(1, 0, "%"PRIu64": Syntax error: Unexpected token while redirecting\n",token_list[start].line_num);
 
   add_redirects(token_list, comm, start+2, end);
 }
