@@ -60,6 +60,7 @@ static TokenList_t lexertokens;
 static uint64_t buf_index = 0;
 static uint64_t last_token_index = 0;
 static uint64_t line_num = 1;
+static int is_command = 0;
 
 /*bool is_reserved(const char* str, uint64_t strl)
 {
@@ -89,6 +90,22 @@ void lexer_assign_type(Token_t* tok)
         if(strcmp(TokAssociations[i].str, lexerbuf + tok->offset) == 0) // FIX DIS SHIT NEED LENGTHS FOR REASONS
         {
             tok->type = TokAssociations[i].type;
+	    switch(tok->type) {
+	    case TOK_IF:
+	    case TOK_WHILE:
+	    case TOK_UNTIL:
+	    case TOK_LPAREN:
+	      is_command++;
+	      break;
+	    case TOK_FI:
+	    case TOK_DONE:
+	    case TOK_RPAREN:
+	      is_command--;
+	      break;
+	    default:
+	      break;
+	    }
+
             return;
         }
     }
@@ -168,6 +185,8 @@ void lexer_putchar(char c)
         lexer_putchar_i('\0');
         break;
     case '\n':
+      if (is_command > 0)
+	c = ';';
         line_num++;
     case '>':
     case '<':
