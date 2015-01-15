@@ -1,428 +1,344 @@
 #include "alloc.h"
-#include "command-internals.h"
 #include "command.h"
+#include "command-internals.h"
+#include "tokenizer.h"
 #include "parser.h"
-#include <stdint.h>
-#include <stdio.h>
-#include <inttypes.h>
 #include <stdlib.h>
-#include <stdbool.h>
+#include <stdio.h>
+#include <error.h>
+#include <inttypes.h>
 
-#define DEFAULT_WORD_NUM (4)
+static TokenList_t* g_tokens_list;
 
-static Token_t* g_tok_list;
-static int64_t g_tok_index;
-static int64_t g_tok_list_len;
-static char* g_tok_buffer;
-static int if_depth;
-
-// A tree. Used to store the head of a recursively-traversed section of the command tree
-typedef struct
-{
-    command_t root;
-    command_t cur_node;
-} tree_context;
-
-// Currently processing line number
-static uint64_t line_num;
-
-// Parse a token list and store the generated command tree into parsed_commands->command_tree
-void parse(Token_t* tok_list, char* tok_buffer, uint64_t tok_list_len, command_t* ret_tree)
-{
-    if_depth = 0;
-    g_tok_buffer = tok_buffer;
-    g_tok_index = -1;
-    g_tok_list = tok_list;
-    g_tok_list_len = tok_list_len;
-    *ret_tree = shell();
+command_t check_fail_parse(Token_t* token_list, int start, int end) {
+  if (token_list[end-1].type == TOK_SC)
+    return parse(g_tokens_list, start, end-1);
+  
+  return parse(g_tokens_list, start, end);
 }
 
-// Moves the read index forward, and returns true on end of token list
-bool getTok(void)
-{
-    //** CHANGED G_TOK_LIST_LEN TO G_TOK_LIST_LEN-1
-    if (g_tok_index++ >= g_tok_list_len-1)
-        return true;
-    return false;
+command_t parse(TokenList_t* token_list, int start, int end) {
+  g_tokens_list = token_list;
+  command_t ret;
+
+  // Check invalid characters at end
+  switch (token_list->tokens[end-1].type){
+  case TOK_SC:
+  case TOK_PIPE:
+  case TOK_LAB:
+  case TOK_RAB:
+    error(1, 0, "%"PRIu64": Syntax error: Unexpected token\n",  token_list->tokens[end-1].line_num);
+  default:
+    break;
+  }
+
+  int i = end-1;
+  int in_command = 0;
+  // Parse SEQUENCE COMMANDS
+  do {
+    if (in_command == 0 && token_list->tokens[i].type == TOK_SC) {
+      ret = (command_t) checked_malloc(sizeof(struct command));
+      ret->type = SEQUENCE_COMMAND;
+      ret->input = NULL;
+      ret->output = NULL;
+      ret->u.command[0] = parse(token_list, start, i);
+      ret->u.command[1] = parse(token_list, i+1, end);
+      return ret;
+    }
+    else {
+      switch(token_list->tokens[i].type) {
+      case TOK_FI:
+      case TOK_RPAREN:
+      case TOK_DONE:
+	in_command++;
+	break;
+      case TOK_IF:
+      case TOK_LPAREN:
+      case TOK_WHILE:
+      case TOK_UNTIL:
+	in_command--;
+	break;
+      default:
+	break;
+      }
+    }
+  } while(i-- > start);
+
+  i = end-1;
+  in_command = 0;
+  // Parse PIPE COMMANDS
+  do {
+    if (in_command == 0 && token_list->tokens[i].type == TOK_PIPE) {
+    ret = (command_t) checked_malloc(sizeof(struct command));
+      ret->type = PIPE_COMMAND;
+      ret->input = NULL;
+      ret->output = NULL;
+      ret->u.command[0] = parse(token_list, start, i);
+      ret->u.command[1] = parse(token_list, i+1, end);
+      return ret;
+    }
+    else {
+      switch(token_list->tokens[i].type) {
+      case TOK_FI:
+      case TOK_RPAREN:
+      case TOK_DONE:
+	in_command++;
+	break;
+      case TOK_IF:
+      case TOK_LPAREN:
+      case TOK_WHILE:
+      case TOK_UNTIL:
+	in_command--;
+	break;
+      default:
+	break;
+      }
+    }
+  } while(i-- > start);
+
+  // All commands are now one line. No pipes or semicolons. Parse these commands
+   switch(token_list->tokens[start].type) {
+   case TOK_IF:
+     ret = magical_if_parser(token_list->tokens, start, end);
+     break;
+   case TOK_WHILE:
+   case TOK_UNTIL:
+     ret = magical_while_until_parser(token_list->tokens, start, end);
+     break;
+   case TOK_LPAREN:
+     ret = magical_subshell_parser(token_list->tokens, start, end);
+     break;
+   case TOK_WORD:
+     ret = magical_word_parser(token_list->tokens, start, end);
+     break;
+   default:
+      error(1, 0, "%"PRIu64": Syntax error: Invalid token\n",  token_list->tokens[start].line_num);
+     break;
+   }
+
+  
+
+
+   return ret;
 }
 
-// Inserts a child command into the ->u.commands list in the parent.
-// Keeps track of position in the 'commands' list by checking for NULL
-// Returns position inserted at, or negative on error
-// Note: Make sure that parent and child are both malloc'd
-int8_t insert_child(command_t parent, command_t child)
-{
-    uint8_t num_children = 0;
-    switch(parent->type)
-    {
-    case IF_COMMAND:
-        num_children = 3;
-        break;
-    case PIPE_COMMAND:
-        num_children = 2;
-        break;
-    case SEQUENCE_COMMAND:
-        num_children = 2;
-        break;
-    case SUBSHELL_COMMAND:
-        num_children = 1;
-        break;
-    case UNTIL_COMMAND:
-        num_children = 2;
-        break;
-    case WHILE_COMMAND:
-        num_children = 2;
-        break;
-    default:
-        break;
-    }
+command_t magical_if_parser(Token_t* token_list, int start, int end) {
+  command_t ret = (command_t) checked_malloc(sizeof(struct command));
+  ret->type = IF_COMMAND;
+  ret->input = NULL;
+  ret->output = NULL;
+  int index = start + 1;
+  int then_index = -1;
+  int else_index = -1;
+  int fi_index = -1;
+  int in_command = 0;
+    do {
+      if (in_command == 0) {
+	switch (token_list[index].type) {
+	case TOK_THEN:
+	  then_index = index;
+	  break;
+	case TOK_ELSE:
+	  else_index = index;
+	  break;
+	case TOK_FI:
+	  fi_index = index;
+	  goto DONE_WITH_SCAN;
+	  break;
+	default:
+	  break;
+	}
+      }
+      else {
+	switch(token_list[index].type) {
+	case TOK_FI:
+	case TOK_RPAREN:
+	case TOK_DONE:
+	  in_command--;
+	  break;
+	case TOK_IF:
+	case TOK_LPAREN:
+	case TOK_WHILE:
+	case TOK_UNTIL:
+	  in_command++;
+	  break;
+	default:
+	  break;
+	}
+      }
+    } while (index++ < end);
 
-    if (num_children == 0)
-    {
-        fprintf(stderr, "%"PRIu64": Syntax Error: Token nesting not supported for command num %d\n", line_num, parent->type);
-        return -1;
+ DONE_WITH_SCAN:
+  if (fi_index == -1) {
+    error(1,0, "%"PRIu64": Syntax error: Expected `fi'\n",token_list[start].line_num);
     }
+  if (then_index != -1)
+    ret->u.command[0] = check_fail_parse(token_list, start+1, then_index);
+  else
+    error(1,0, "%"PRIu64": Syntax error: Expected `then'\n",token_list[start].line_num);
 
-    // Insert into the first NULL space; return the position inserted into
-    uint8_t child_index;
-    for(child_index = 0; child_index < num_children; child_index++)
-    {
-        if(parent->u.command[child_index] == NULL)
-        {
-            parent->u.command[child_index] = child;
-            return child_index;
-        }
-    }
+  if (else_index != -1) {
+    ret->u.command[1] = check_fail_parse(token_list, then_index+1, else_index);
+    ret->u.command[2] = check_fail_parse(token_list, else_index+1, fi_index);
+  }
+  else {
+    ret->u.command[1] = check_fail_parse(token_list, then_index+1, fi_index);
+    ret->u.command[2] = NULL;
+  }
 
-    fprintf(stderr, "%"PRIu64": Syntax Error: Too many child tokens following command num %d\n", line_num, parent->type);
-    return -2;
+  add_redirects(token_list, ret, fi_index+1, end);
+  return ret;
 }
 
-// Attach another word to the end of the words pointer list on a simple_command
-void simple_append_word(command_t simple_command, char* word)
-{
-    if(simple_command->type != SIMPLE_COMMAND)
-    {
-        fprintf(stderr, "%"PRIu64": Internal error: attempt to append %s to non-simple command\n", line_num, word);
-        return;
-    }
-    // If the word index overruns the buffer, attempt to reallocate
-    if(simple_command->word_index == simple_command->n_words)
-    {
-        // Expand the buffer exponentially by two
-        simple_command->n_words *= 2;
-        // Checked-realloc (allocate one extra spot for a terminating null pointer)
-        simple_command->u.word = (char**)checked_realloc(simple_command->u.word, sizeof(char*) * (simple_command->n_words + 1));
-
-        // Initialize newly allocated pointers to NULL
-        int i;
-        for(i = simple_command->word_index + 1; i < (simple_command->n_words + 1); i++)
-        {
-            simple_command->u.word[i] = NULL;
-        }
-    }
-    // Put the word at the next position
-    simple_command->u.word[simple_command->word_index++] = word;
-}
-
-// Malloc/construct a new node, setting all child pointers to NULL in preparation for child insertion
-command_t construct_node(command_type type)
-{
-    // checked malloc the actual command struct
-    command_t ret = (command_t) checked_malloc(sizeof(struct command));
-
+command_t magical_while_until_parser(Token_t* token_list, int start, int end) {
+  command_t ret = (command_t) checked_malloc(sizeof(struct command));
+  if (token_list[start].type == TOK_UNTIL) {
+    ret->type = UNTIL_COMMAND;
+    ret->input = NULL;
+    ret->output = NULL;
+  }
+  else if (token_list[start].type == TOK_WHILE) {
+    ret->type = WHILE_COMMAND;
     ret->input = NULL;
     ret->output = NULL;
 
-    // initialize the type
-    ret->type = type;
-    if(type != SIMPLE_COMMAND)
-    {
-        // If it is not a simple_command, initialize the contents of the buffer
-        int i;
-        for(i = 0; i < 3; i++)
-        {
-            ret->u.command[i] = NULL;
-        }
-    }
-    else
-    {
-        // Malloc space for the SIMPLE_COMMAND's word
-        ret->n_words = DEFAULT_WORD_NUM;
-        ret->word_index = 0;
-        ret->u.word = (char**)checked_malloc(sizeof(char*) * (ret->n_words + 1));
+  }
+  else
+    error(1,0, "%"PRIu64": Syntax error: Invalid token..just in case\n",token_list[start].line_num);
 
-        //**ADDED SELF AS FIRST WORD
-        simple_append_word(ret, g_tok_buffer + g_tok_list[g_tok_index].offset);
-        // Initialize newly allocated pointers to NULL
-        int i;
-        for(i = 1; i < (ret->n_words + 1); i++)
-        {
-            ret->u.word[i] = NULL;
-        }
+  int index = start+1;
+  int do_index = -1;
+  int done_index = -1;
+  int in_command = 0;
+
+  do {
+    if (in_command == 0) {
+      if (token_list[index].type == TOK_DONE) {
+	done_index = index;
+	break;
+      }
+
+      else if (token_list[index].type == TOK_DO) {
+	do_index = index;
+      }
+    }  
+    else {
+      switch(token_list[index].type) {
+      case TOK_FI:
+      case TOK_RPAREN:
+      case TOK_DONE:
+	in_command--;
+	break;
+      case TOK_IF:
+      case TOK_LPAREN:
+      case TOK_WHILE:
+      case TOK_UNTIL:
+	in_command++;
+	break;
+      default:
+	break;
+      }
+     }
+  } while(index++ < end);
+
+  if (done_index == -1) {
+    error(1,0, "%"PRIu64": Syntax error: Expected `done'\n",token_list[start].line_num);
     }
-    return ret;
+  if (do_index != -1) {
+    ret->u.command[0] = check_fail_parse(token_list, start+1, do_index);
+    ret->u.command[1] = check_fail_parse(token_list, do_index+1, done_index);
+    ret->u.command[2] = NULL;
+  }
+  else
+    error(1,0, "%"PRIu64": Syntax error: Expected `do'\n",token_list[start].line_num);
+
+  add_redirects(token_list, ret, done_index+1, end);
+  return ret;
 }
 
+command_t magical_subshell_parser(Token_t* token_list, int start, int end) {
+  command_t ret = (command_t) checked_malloc(sizeof(struct command));
+  ret->type = SUBSHELL_COMMAND;
+  ret->input = NULL;
+  ret->output = NULL;
+  int index = start+1;
+  int rparen_index = -1;
+  int in_command = 0;
 
-// Note: returns the newly created node
-uint8_t insert_node(command_type type, tree_context * context, command_t* ret_command)
-{
-//    int8_t rval = 0;
+  do {
+      if (in_command == 0 && token_list[index].type == TOK_RPAREN) {
+	  rparen_index = index;
+	  break;
+      }
+      else {
+	switch(token_list[index].type) {
+	case TOK_FI:
+	case TOK_RPAREN:
+	case TOK_DONE:
+	  in_command--;
+	  break;
+	case TOK_IF:
+	case TOK_LPAREN:
+	case TOK_WHILE:
+	case TOK_UNTIL:
+	  in_command++;
+	  break;
+	default:
+	  break;
+	}
+      }
+  } while (index++ < end);
+  
+  if (rparen_index == -1)
+    error(1,0, "%"PRIu64": Syntax error: Expected `)'\n",token_list[start].line_num);
+  else {
+    ret->u.command[0] = check_fail_parse(token_list, start+1, rparen_index);
+    ret->u.command[1] = NULL;
+    ret->u.command[2] = NULL;
+  }
 
-    command_t node = construct_node(type);
-
-    if (context->root == NULL)
-        context->root = node;
-
-    if(context->cur_node != NULL)
-    {
-
-        //** CHANGED CONTEXT->CUR_NODE TO CONTEXT->ROOT
-        context->root->child_index = insert_child(context->root, node);
-        if(context->root->child_index < 0)
-            exit(context->root->child_index);
-
-    }
-
-    context->cur_node = node;
-    *ret_command = node;
-    return context->root->child_index;
+  add_redirects(token_list, ret, rparen_index+1, end);
+  return ret;
 }
 
-static int entry_count = 0;
+command_t magical_word_parser(Token_t* token_list, int start, int end) {
+  command_t ret = (command_t) checked_malloc(sizeof(struct command));
+  ret->type = SIMPLE_COMMAND;
+  ret->input = NULL;
+  ret->output = NULL;
 
-void shell_inner(tree_context * context)
-{
-    printf("shell_inner: %d\n", ++entry_count);
+  int index = start;
 
-    int loop_count = 0;
-    //static
+  do {
+    if (token_list[index].type != TOK_WORD)
+      break;
+    } while (index++ < end);
 
-    while((++g_tok_index) < g_tok_list_len)
-    {
+  int i;
+  int e = index-start;
+  ret->u.word = (char**) checked_malloc(sizeof(char*)*(e+1));
+  
+  for(i = 0; i < e+1; i++) {
+    ret->u.word[i] = g_tokens_list->token_buffer+token_list[start+i].offset;
+  }
+  ret->u.word[e] = NULL;
 
-        printf("shell_inner: %d; %d: token=%s\n",
-               entry_count,
-               loop_count++,
-               g_tok_buffer + g_tok_list[g_tok_index].offset);
-        // Create a new tree context to hold the branch
-        tree_context inner_context;
-//        uint8_t insertion_index = 0;
-        command_t temp_node = NULL;
-        inner_context.root = inner_context.cur_node = NULL;
-
-        // Update the line number
-        line_num = g_tok_list[g_tok_index].line_num;
-
-        // If the parent node is a SIMPLE_COMMAND
-        //** ADDED CHECK FOR NULL
-        if(context->root != NULL && context->root->type == SIMPLE_COMMAND)
-        {
-            // Only a few special tokens will break out of the SIMPLE_COMMAND argument list
-            switch(g_tok_list[g_tok_index].type)
-            {
-            case TOK_SC:
-            case TOK_PIPE:
-            case TOK_NL:
-            case TOK_LPAREN:
-            case TOK_RPAREN:
-            case TOK_LAB:
-            case TOK_RAB:
-                return;
-                break;
-            default:
-                // For every regular token, append it as text arguments to the parent SIMPLE_COMMAND
-                simple_append_word(context->root, g_tok_buffer + g_tok_list[g_tok_index].offset);
-                continue;
-            }
-        }
-        else
-        {
-
-            // Switch on the current token's type
-            switch (g_tok_list[g_tok_index].type)
-            {
-            case TOK_IF:
-                //**CHANGED SUBSHELL->IF
-                // Add the new node to the supertree; maintain insertion index
-                if_depth++;
-                //insertion_index =
-                insert_node(IF_COMMAND, context, &inner_context.root);
-
-                inner_context.cur_node = inner_context.root;
-
-                // Call shell_inner() recursively, passing the subtree context
-//                if(getTok())
-//                  return;
-                shell_inner(&inner_context);
-                break;
-            case TOK_THEN:
-                // If the root (parent) node type is not IF_COMMAND, or if a TOK_THEN has already been seen
-                if(context->root->type != IF_COMMAND || context->root->child_index != 0)//insertion_index != 0)
-                {
-                    fprintf(stderr, "%"PRIu64": Syntax error: unexpected `then'\n", line_num);
-                    exit(-1);
-                }
-                break;
-            case TOK_FI:
-                if_depth--;
-                if(context->root->type != IF_COMMAND || context->root->child_index == 0)//insertion_index == 0)
-                {
-                    fprintf(stderr, "%"PRIu64": Syntax error: unexpected `fi'\n", line_num);
-                    exit(-1);
-                }
-                // Pop!
-                return;
-                break;
-            case TOK_ELSE:
-                // If the root (parent) node type is not IF_COMMAND, or if a TOK_THEN has already been seen
-                if(context->root->type != IF_COMMAND || context->root->child_index != 1)//insertion_index != 1)
-                {
-                    fprintf(stderr, "%"PRIu64": Syntax error: unexpected `else'\n", line_num);
-                    exit(-1);
-                }
-                break;
-            case TOK_WHILE:
-                // Add the new node to the supertree; maintain insertion index
-//                insertion_index =
-                insert_node(WHILE_COMMAND, context, &inner_context.root);
-                inner_context.cur_node = inner_context.root;
-
-                // Call shell_inner() recursively, passing the subtree context
-//                if(getTok())
-//                  return;
-                shell_inner(&inner_context);
-                break;
-            case TOK_UNTIL:
-                // Add the new node to the supertree; maintain insertion index
-//                insertion_index =
-                insert_node(UNTIL_COMMAND, context, &inner_context.root);
-                inner_context.cur_node = inner_context.root;
-
-                // Call shell_inner() recursively, passing the subtree context
-//                if(getTok())
-//                  return;
-                shell_inner(&inner_context);
-                break;
-            case TOK_DO:
-                if(context->root->type != WHILE_COMMAND || context->root->type != UNTIL_COMMAND || context->root->child_index != 0)//insertion_index != 0)
-                {
-                    fprintf(stderr, "%"PRIu64": Syntax error: unexpected `do'\n", line_num);
-                    exit(-1);
-                }
-                break;
-            case TOK_DONE:
-                if(context->root->type != WHILE_COMMAND || context->root->type != UNTIL_COMMAND || context->root->child_index != 1)//insertion_index != 1)
-                {
-                    fprintf(stderr, "%"PRIu64": Syntax error: unexpected `done'\n", line_num);
-                    exit(-1);
-                }
-                // Pop!
-                return;
-                break;
-            case TOK_WORD:
-                // Add the new node to the supertree; maintain insertion index
-//                insertion_index =
-                insert_node(SIMPLE_COMMAND, context, &inner_context.root);
-                inner_context.cur_node = inner_context.root;
-                // Call shell_inner() recursively, passing the subtree context
-//                if(getTok())
-//                  return;
-                shell_inner(&inner_context);
-                break;
-            case TOK_NL:
-                break;
-
-            case TOK_SC:
-                if (if_depth > 0)
-                {
-                    return;
-                }
-            case TOK_PIPE:
-                //** IF LAST TOKEN, DON'T SPLIT!
-                if(g_tok_index == g_tok_list_len-1)
-                    return;
-
-                // Store the old root temporarily so tree can be reordered
-                temp_node = context->cur_node;
-
-                if (context->root->type == SIMPLE_COMMAND)
-                {
-                    temp_node = context->root;
-                    context->root = context->cur_node = NULL;
-                }
-                else
-                    context->root->u.command[context->root->child_index]= NULL;
-
-                char* str_type = "Unknown linking";
-                if(g_tok_list[g_tok_index].type == TOK_SC)
-                {
-                    str_type = "Sequence";
-//                    insertion_index =
-                    insert_node(SEQUENCE_COMMAND, context, &inner_context.root);
-                }
-                if(g_tok_list[g_tok_index].type == TOK_PIPE)
-                {
-                    str_type = "Pipe";
-//                    insertion_index =
-                    insert_node(PIPE_COMMAND, context, &inner_context.root);
-                }
-
-                //THIS WILL BE REMOVED AFTER FIX TOKENIZER
-                if(g_tok_list[g_tok_index].type == TOK_NL)
-                {
-                    str_type = "New line";
-//                    insertion_index =
-                    insert_node(SEQUENCE_COMMAND, context, &inner_context.root);
-                }
-                inner_context.cur_node = inner_context.root;
-
-                // Insert the whole tree that used to be located at context->root (now at temp_root) under the new sequence command.
-                // Should end up being inserted at the zeroth index.
-                if(insert_child(inner_context.cur_node, temp_node) != 0)
-                {
-                    fprintf(stderr, "%"PRIu64": Internal error: %s token has incorrect number of children.\n", line_num, str_type);
-                }
-
-                // Call shell_inner() recursively, passing the subtree context
-//                if(getTok())
-//                  return;
-                shell_inner(&inner_context);
-                break;
-            case TOK_LPAREN:
-
-                break;
-            case TOK_RPAREN:
-
-                break;
-            case TOK_LAB:
-
-                break;
-            case TOK_RAB:
-
-                break;
-            case TOK_COL:
-
-                break;
-            }
-        }
-//        if (g_tok_index >= g_tok_list_len-1) {
-//            context->root = inner_context.root;
-//        }
-    }
+  add_redirects(token_list, ret, index, end);
+  return ret;
 }
 
-command_t shell()
-{
-    // Create an initial context; this is the root of all trees in the recursive structure
-    tree_context* initial_context = (tree_context*)checked_malloc(sizeof(tree_context));
-    initial_context->cur_node = initial_context->root = NULL;
+void add_redirects(Token_t* token_list, command_t comm, int start, int end) {
+  if (start >= end)
+    return;
 
-    // Call shell_inner
-    shell_inner(initial_context);
+  if (token_list[start].type == TOK_LAB && end > start+1) {
+    comm->input = g_tokens_list->token_buffer+token_list[start+1].offset;
+  }
+  else if (token_list[start].type == TOK_RAB && end > start+1) {
+    comm->output = g_tokens_list->token_buffer+token_list[start+1].offset;
+  }
+  else
+    error(1, 0, "%"PRIu64": Syntax error: Unexpected token\n",token_list[start].line_num);
 
-//    command_t ret = initial_context->root->u.command[0];
-//    free(initial_context->root);
-    return initial_context->root;
+  add_redirects(token_list, comm, start+2, end);
 }

@@ -26,16 +26,17 @@
 
 #include "tokenizer.h"
 #include "parser.h"
-#include <stdbool.h>
 #include <stdio.h>
 
 /* FIXME: Define the type 'struct command_stream' here.  This should
    complete the incomplete type declaration in command.h.  */
 
 struct command_stream {
-  command_t command_tree;
+  command_t command_tree_list;
+  int read_index;
+  int list_size;
 };
-static bool printed;
+
 
 command_stream_t
 make_command_stream (int (*get_next_byte) (void *),
@@ -52,28 +53,55 @@ make_command_stream (int (*get_next_byte) (void *),
     lexer_putchar(c);
   }
 
-  TokenList_t tokens;
-  lexer_get_tokens(&tokens);
+  TokenList_t token_list;
+  lexer_get_tokens(&token_list);
 
-  // Parse tokens into commands
-  command_stream_t parsed_commands = (command_stream_t) checked_malloc(sizeof(struct command_stream));
+  command_stream_t stream = (command_stream_t) checked_malloc(sizeof(struct command_stream));
 
-  parse(tokens.tokens, tokens.token_buffer, tokens.num_tokens, &(parsed_commands->command_tree));
-  printed = false;
-  //  error (1, 0, "command reading not yet implemented");
-  return parsed_commands;
+  stream->list_size = 64;
+  stream->command_tree_list = (command_t) checked_malloc(sizeof(struct command)*stream->list_size);
+
+  int count = 0;
+  int index = 0;
+  while(1) {
+    int start = index;
+    while (index < token_list.num_tokens) {
+      if (token_list.tokens[index].type == TOK_NL){
+	break;
+      }
+      index++;
+    }
+    if (token_list.tokens[index-1].type == TOK_SC)
+      stream->command_tree_list[count] = *parse(&token_list, start, index-1);
+    else
+      stream->command_tree_list[count] = *parse(&token_list, start, index);
+    index++;
+    count++;
+
+    if (index >= token_list.num_tokens-1){
+      stream->list_size = count;
+      stream->read_index = 0;
+      break;
+    }
+
+    // Reallocate list of command_trees if needed
+    if (count == stream->list_size){
+      stream->list_size *=2;
+      stream->command_tree_list = (command_t) checked_realloc(stream->command_tree_list, sizeof(struct command)*stream->list_size);
+    }
+  }
+
+  
+  return stream;
 }
 
 command_t
 read_command_stream (command_stream_t s)
 {
-  /* FIXME: Replace this with your implementation too.  */
 
-  if (!printed) {
-    return s->command_tree;
-    printed = true;
+  if (s->read_index < s->list_size) {
+    return s->command_tree_list + s->read_index++;
   }
 
-  //  error (1, 0, "command reading not yet implemented");
   return NULL;
 }

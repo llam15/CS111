@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#define TEST
+//#define TEST
 
 #ifdef TEST
 #include "tokenizer.h"
@@ -27,11 +27,11 @@
 #include <stdbool.h>
 #include <string.h>
 
-//char * testline = "if cat < /etc/passwd | tr a-z A-Z | sort -u; then :; else echo sort failed!; fi\n|#this is a comment!\n | ( ) if then else\n";
+char * testline = "if cat /etc/passwd | tr a-z A-Z | sort -u; then :; else echo sort failed!; fi\n";
 
-char * testline = "if true; then echo hello; fi\n#comment";
+//char * testline = "if (A|B;C|D); then echo hello;fi ;fi\n#comment";
 
-//char * testline = "(echo hello)\n";
+//char * testline = "A<C>B";
 
 int main(void)
 {
@@ -43,6 +43,7 @@ int main(void)
         lexer_putchar(testline[i]);
     }
 
+    lexer_putchar('\0');
     TokenList_t tokens;
     lexer_get_tokens(&tokens);
 
@@ -54,14 +55,29 @@ int main(void)
                 strToPrint = "\\n";
         }
         printf("%s, %d\n", strToPrint, tokens.tokens[i].type);
+	}
+
+  command_t parse_tree;
+  int count = 0;
+  int index = 0;
+  while(1) {
+    int start = index;
+    while (index < tokens.num_tokens) {
+      if (tokens.tokens[index].type == TOK_NL){
+	break;
+      }
+      index++;
     }
+    if (tokens.tokens[index-1].type == TOK_SC)
+      parse_tree = parse(&tokens, start, index-1);
+    else
+      parse_tree  = parse(&tokens, start, index);
+    count++;
 
-    command_t parse_tree;
-
-    parse(tokens.tokens, tokens.token_buffer, tokens.num_tokens, &parse_tree);
-
-    print_command(parse_tree);
-
+    if (index >= tokens.num_tokens-1)
+      break;
+  }
+  print_command(parse_tree);
     return 0;
 }
 

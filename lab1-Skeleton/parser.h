@@ -1,16 +1,13 @@
-#ifndef _PARSER_h_
-#define _PARSER_h_
+#ifndef _PARSER_H_
+#define _PARSER_H_
 
-#include "tokenizer.h"
 #include "command.h"
-#include <stdint.h>
-#include <stdbool.h>
 
-// Pass in TokenList_t instead of all of its members duh
-void parse(Token_t* tok_list, char* tok_buffer, uint64_t tok_list_len, command_t* ret_tree);
+command_t parse(TokenList_t* token_list, int start, int end);
+command_t magical_if_parser(Token_t* token_list, int start, int end);
+command_t magical_while_until_parser(Token_t* token_list, int start, int end);
+command_t magical_subshell_parser(Token_t* token_list, int start, int end);
+command_t magical_word_parser(Token_t* token_list, int start, int end);
+void add_redirects(Token_t* token_list, command_t comm, int start, int end);
 
-bool getTok(void);
-
-command_t shell(void);
-
-#endif //PARSER_h_
+#endif //_PARSER_H_
