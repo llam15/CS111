@@ -17,19 +17,11 @@
 
 #include "command.h"
 #include "command-internals.h"
-
 #include "error.h"
 #include "alloc.h"
-
-/* FIXME: You may need to add #include directives, macro definitions,
-   static function definitions, etc.  */
-
 #include "tokenizer.h"
 #include "parser.h"
 #include <stdio.h>
-
-/* FIXME: Define the type 'struct command_stream' here.  This should
-   complete the incomplete type declaration in command.h.  */
 
 struct command_stream {
   command_t command_tree_list;
@@ -42,22 +34,23 @@ command_stream_t
 make_command_stream (int (*get_next_byte) (void *),
 		     void *get_next_byte_argument)
 {
-  /* FIXME: Replace this with your implementation.  You may need to
-     add auxiliary functions and otherwise modify the source code.
-     You can also use external functions defined in the GNU C Library.  */
-
   // Initialize lexer and tokenize input
   lexer_init();
   char c;
+
+  // Input characters to lexer until EOF
   while ((c = (char)get_next_byte(get_next_byte_argument)) != EOF) {
     lexer_putchar(c);
   }
+
+  // Terminate lexer buffer with null byte (to ensure last token is not lost)
   lexer_putchar('\0');
+
+  // Get tokens
   TokenList_t token_list;
   lexer_get_tokens(&token_list);
 
   command_stream_t stream = (command_stream_t) checked_malloc(sizeof(struct command_stream));
-
   stream->list_size = 64;
   stream->command_tree_list = (command_t) checked_malloc(sizeof(struct command)*stream->list_size);
 
@@ -65,19 +58,22 @@ make_command_stream (int (*get_next_byte) (void *),
   int index = 0;
   while(1) {
     int start = index;
+    // Scan until newline token to find one complete command
     while (index < token_list.num_tokens) {
       if (token_list.tokens[index].type == TOK_NL){
 	break;
       }
       index++;
     }
+    // Remove trailing valid semicolons if necessary, then parse
     if (token_list.tokens[index-1].type == TOK_SC)
       stream->command_tree_list[count] = *parse(&token_list, start, index-1);
     else
       stream->command_tree_list[count] = *parse(&token_list, start, index);
     index++;
     count++;
-
+    
+    // Done parsing all commands
     if (index >= token_list.num_tokens-1){
       stream->list_size = count;
       stream->read_index = 0;
@@ -91,14 +87,13 @@ make_command_stream (int (*get_next_byte) (void *),
     }
   }
 
-  
   return stream;
 }
 
 command_t
 read_command_stream (command_stream_t s)
 {
-
+  // Return next command in array
   if (s->read_index < s->list_size) {
     return s->command_tree_list + s->read_index++;
   }

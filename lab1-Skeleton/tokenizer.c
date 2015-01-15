@@ -9,29 +9,15 @@
 #include <ctype.h>
 #include <inttypes.h>
 
-// String constants
-#define NUM_RESERVED_STRINGS 6//8
-
-const char* const reserved_strings[] =
-{
-    "if",
-    "else",
-    "then",
-    //    "fi",
-    "while",
-    "until",
-    "do",
-    //"done"
-};
-
 typedef struct
 {
     Token_type type;
     const char * str;
 } TokenAssoc_t;
 
-// NOTE: the association list does not include "TOK_WORD" as that is the default case
-#define NUM_TOKEN_ASSOC 15//16
+// NOTE: The association list does not include "TOK_WORD" as that is the default case
+// NOTE: Colons are interpreted as TOK_WORDs
+#define NUM_TOKEN_ASSOC 15
 
 const TokenAssoc_t const TokAssociations[] =
 {
@@ -49,8 +35,7 @@ const TokenAssoc_t const TokAssociations[] =
     {TOK_RPAREN, ")"},
     {TOK_LAB, "<"},
     {TOK_RAB, ">"},
-    {TOK_NL, "\n"},
-    //    {TOK_COL, ":"},
+    {TOK_NL, "\n"}
 };
 
 // Buffer declaration and initial size
@@ -96,6 +81,7 @@ void lexer_assign_type(Token_t* tok)
     if (simple_command)
       return;
 
+    // Assign type to finished token. Also update counter on nested commands
     for(i = 0; i < NUM_TOKEN_ASSOC; i++)
     {
         if(strcmp(TokAssociations[i].str, lexerbuf + tok->offset) == 0) // FIX DIS SHIT NEED LENGTHS FOR REASONS
@@ -116,10 +102,11 @@ void lexer_assign_type(Token_t* tok)
 	    default:
 	      break;
 	    }
-
             return;
         }
     }
+
+    // If TOK_WORD, following tokens are also TOK_WORD until delimiter
     simple_command = true;
 }
 
@@ -181,7 +168,7 @@ void lexer_putchar(char c)
     static bool consume_switch = false;
     static char last_c = '\0';
 
-    // return to caller whilst consuming (comments?) until a newline
+    // return to caller whilst consuming comments until a newline
     if(consume_switch)
     {
         if(c == '\n')
@@ -190,62 +177,66 @@ void lexer_putchar(char c)
             return;
     }
 
-    switch(c)
-    {
+    switch(c) {
+    // Replace whitespace with nullbytes 
     case ' ':
     case '\t':
-        lexer_putchar_i('\0');
-        break;
+      lexer_putchar_i('\0');
+    break;
+    // Error if previous character was also redirect command. Following token must be interpreted as TOK_WORD 
     case '>':
     case '<':
-        if (strchr("<>", last_c))
-	    error(1,0,"%"PRIu64": Syntax error: Unexpected newline\n", line_num);
-        lexer_putchar_i('\0');
-        simple_command = false;
-        lexer_putchar_i(c);
-        lexer_putchar_i('\0');
-	simple_command = true;
-        break;
+      if (strchr("<>", last_c))
+	error(1,0,"%"PRIu64": Syntax error: Unexpected newline\n", line_num);
+    lexer_putchar_i('\0');
+    simple_command = false;
+    lexer_putchar_i(c);
+    lexer_putchar_i('\0');
+    simple_command = true;
+    break;
+    // Error if previous character was redirect comand. Otherwise, consume unnecessary newlines. Replace with semicolon when applicable
     case '\n':
-        if (strchr("<>", last_c))
-	    error(1,0,"%"PRIu64": Syntax error: Unexpected newline\n", line_num);
-        line_num++;
-	lexer_putchar_i('\0');
-        simple_command = false;
-	if (strchr("\n(|\0", last_c) || is_reserved(lexertokens.tokens[lexertokens.num_tokens-1]))
-	    break;
+      if (strchr("<>", last_c))
+	error(1,0,"%"PRIu64": Syntax error: Unexpected newline\n", line_num);
+      line_num++;
+      lexer_putchar_i('\0');
+      simple_command = false;
+      if (strchr("\n(|\0", last_c) || is_reserved(lexertokens.tokens[lexertokens.num_tokens-1]))
+	break;
 
-	if (is_command > 0 && !is_reserved(lexertokens.tokens[lexertokens.num_tokens-1])) {
-	  lexer_putchar_i(';');
-	  lexer_putchar_i('\0');
-	  break;
-	}
+      if (is_command > 0 && !is_reserved(lexertokens.tokens[lexertokens.num_tokens-1])) {
+	lexer_putchar_i(';');
+	lexer_putchar_i('\0');
+	break;
+      }
+    // Error if previous character was redirect command, Else is delimiter and ends TOK_WORDs
     case '|':
     case ';':
     case '(':
     case ')':
-        if (strchr("<>", last_c))
-	    error(1,0,"%"PRIu64": Syntax error: Unexpected newline\n", line_num);
-        lexer_putchar_i('\0');
-        simple_command = false;
-        lexer_putchar_i(c);
-        lexer_putchar_i('\0');
-        break;
-    // Comment character
+      if (strchr("<>", last_c))
+	error(1,0,"%"PRIu64": Syntax error: Unexpected newline\n", line_num);
+    lexer_putchar_i('\0');
+    simple_command = false;
+    lexer_putchar_i(c);
+    lexer_putchar_i('\0');
+    break;
+    // Comment character. Consume following tokens until (but not including) newline
     case '#':
-        simple_command = false;
-        if(strchr(" \t\n;|()", last_c))
-            consume_switch = true;
-        break;
+      simple_command = false;
+      if(strchr(" \t\n;|()", last_c))
+	consume_switch = true;
+      break;
+    // Check if c is valid word character, else return error
     default:
-        if (isalnum(c) || strchr("!%+,-./:@^_", c)) {
-            lexer_putchar_i(c);
-        }
-        else
+      if (isalnum(c) || strchr("!%+,-./:@^_", c)) {
+	lexer_putchar_i(c);
+      }
+      else
         {
 	  error(1,0, "%"PRIu64": Syntax error: `%c\' is not valid.\n",  line_num, c);
         }
-        break;
+      break; 
     }
 
     last_c = c;
@@ -253,18 +244,8 @@ void lexer_putchar(char c)
 
 void lexer_get_tokens(TokenList_t* tokens)
 {
-    tokens->token_buffer = lexerbuf;
-    tokens->tokens = lexertokens.tokens;
-    tokens->num_tokens = lexertokens.num_tokens;
-    /*    int i;
-    for(i = 0; i < tokens->num_tokens; i++)
-    {
-        char * strToPrint = tokens->tokens[i].offset + lexerbuf;
-        if(strncmp(strToPrint, "\n", 1) == 0)
-        {
-                strToPrint = "\\n";
-        }
-        printf("%s, %d\n", strToPrint, tokens->tokens[i].type);
-	}
-    */
+  // Copy lexer information to tokens
+  tokens->token_buffer = lexerbuf;
+  tokens->tokens = lexertokens.tokens;
+  tokens->num_tokens = lexertokens.num_tokens;
 }
