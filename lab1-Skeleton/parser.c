@@ -323,8 +323,10 @@ void shell_inner(tree_context * context)
                   return;
                 shell_inner(&inner_context);
                 break;
+	    case TOK_NL:
+	        break;
+
             case TOK_SC:
-            case TOK_NL:
                     if (if_depth > 0) {
                         return;
                     }
