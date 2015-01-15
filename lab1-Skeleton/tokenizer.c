@@ -9,18 +9,18 @@
 #include <inttypes.h>
 
 // String constants
-#define NUM_RESERVED_STRINGS 8
+#define NUM_RESERVED_STRINGS 6//8
 
 const char* const reserved_strings[] =
 {
     "if",
     "else",
     "then",
-    "fi",
+    //    "fi",
     "while",
     "until",
     "do",
-    "done"
+    //"done"
 };
 
 typedef struct
@@ -186,10 +186,11 @@ void lexer_putchar(char c)
         break;
     case '\n':
         line_num++;
-	if (is_reserved(lexerbuf+last_token_index, buf_index-last_token_index))
+	lexer_putchar_i('\0');
+	if (strchr("\n(><|\0", last_c) || is_reserved(lexerbuf+last_token_index, buf_index-last_token_index))
 	    break;
 
-        if (is_command > 0 && !strchr("\n(><|\0", last_c)){
+        if (is_command > 0){
 	    c = ';';
 	}
 	
