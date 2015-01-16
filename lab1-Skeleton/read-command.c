@@ -55,9 +55,9 @@ make_command_stream (int (*get_next_byte) (void *),
   stream->command_tree_list = (command_t) checked_malloc(sizeof(struct command)*stream->list_size);
 
   int count = 0;
-  int index = 0;
+  uint64_t index = 0;
   while(1) {
-    int start = index;
+    uint64_t start = index;
     // Scan until newline token to find one complete command
     while (index < token_list.num_tokens) {
       if (token_list.tokens[index].type == TOK_NL){
