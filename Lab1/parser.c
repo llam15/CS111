@@ -44,6 +44,7 @@ command_t parse(TokenList_t* token_list, int start, int end) {
 
       // Initialize type, input, output
       ret->type = SEQUENCE_COMMAND;
+      ret->status = -1;
       ret->input = NULL;
       ret->output = NULL;
       
@@ -83,6 +84,7 @@ command_t parse(TokenList_t* token_list, int start, int end) {
       
       // Initialize type, input, output
       ret->type = PIPE_COMMAND;
+      ret->status = -1;
       ret->input = NULL;
       ret->output = NULL;
 
@@ -141,6 +143,7 @@ command_t magical_if_parser(Token_t* token_list, int start, int end) {
   
   // Initialize type, input, output
   ret->type = IF_COMMAND;
+  ret->status = -1;
   ret->input = NULL;
   ret->output = NULL;
 
@@ -221,11 +224,13 @@ command_t magical_while_until_parser(Token_t* token_list, int start, int end) {
   // Initialize type, input, output
   if (token_list[start].type == TOK_UNTIL) {
     ret->type = UNTIL_COMMAND;
+    ret->status = -1;
     ret->input = NULL;
     ret->output = NULL;
   }
   else if (token_list[start].type == TOK_WHILE) {
     ret->type = WHILE_COMMAND;
+    ret->status = -1;
     ret->input = NULL;
     ret->output = NULL;
   }
@@ -293,6 +298,7 @@ command_t magical_subshell_parser(Token_t* token_list, int start, int end) {
 
   // Initialize type, input, output
   ret->type = SUBSHELL_COMMAND;
+  ret->status = -1;
   ret->input = NULL;
   ret->output = NULL;
   int index = start+1;
@@ -346,6 +352,7 @@ command_t magical_word_parser(Token_t* token_list, int start, int end) {
 
   // Initialize type, input, output
   ret->type = SIMPLE_COMMAND;
+  ret->status = -1;
   ret->input = NULL;
   ret->output = NULL;
 
