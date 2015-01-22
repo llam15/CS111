@@ -24,8 +24,8 @@
    static function definitions, etc.  */
 #include <sys/types.h>
 #include <sys/wait.h>
-
-
+#include <unistd.h>
+#include <stdio.h>
 
 int
 prepare_profiling (char const *name)
@@ -83,31 +83,35 @@ recursive_execute(command_t c, int input, int output)
 
 }
 
-int exec_wait(const char* cname) {
+int exec_wait(char* const * cname) {
   int status;
 
   pid_t pid = fork();
-  if(pid < 0)
-    {
+  if(pid < 0) {
       error(1, 0, "Failed to fork");
-    }
-  else if(pid > 0)
-    {
-      wait(pid, &status, 0);
-      return WEXITSTATUS(&status);
-    }
-  else
-    {
-      execvp(cname, /*flags*/ 0);
-    }
+  }
+
+  else if(pid > 0) {
+    waitpid(pid, &status, 0);
+    return WEXITSTATUS(&status);
+  }
+
+  else {
+    execvp(cname[0], cname);
+    fprintf(stderr, "%s: Command not found\n", cname[0]);
+    _exit(127);
+  }
+  return -1;
 }
 
 void execute_sequence(command_t c, int input, int output)
 {
+  // Execute first command, then second command
   recursive_execute(c->u.command[0], input, output);
   recursive_execute(c->u.command[1], input, output);
 
-  c->status = command_status(c->u.command[1];
+  // Set exit status to exit status of second command
+  c->status = command_status(c->u.command[1]);
 }
 
 void execute_pipe(command_t c, int input, int output)
@@ -125,29 +129,37 @@ void execute_subshell(command_t c, int input, int output)
 
 void execute_if(command_t c, int input, int output)
 {
-  recursive_execute(c->u.command[0]);
+  // Execute conditional
+  recursive_execute(c->u.command[0], input, output);
 
+  // If conditional is true, execute then statement
   if (command_status(c->u.command[0]) == 0) {
-    recursive_execute(c->u.command[1]);
+    recursive_execute(c->u.command[1], input, output);
     c->status = command_status(c->u.command[1]);
   }
+
+  // If conditional is false, execute else statement (if exists)
   else if (c->u.command[2] != NULL) {
-    recursive_execute(c->u.command[2]);
-    c->status = command_status(c->u.command[2];
+    recursive_execute(c->u.command[2], input, output);
+    c->status = command_status(c->u.command[2]);
   }
+
+  // Conditional is false, no else statement. Exit status is conditional's exit status
   else {
-    c->status = command_status(c->u.command[1]);
+    c->status = command_status(c->u.command[0]);
   }
 }
 
 void execute_while(command_t c, int input, int output)
 {
+  // Execute conditional. While conditional is true, execute body
   do { 
-    recursive_execute(c->u.command[0]);
-    if (command_status(c->u.command[0] == 0))
-	recursive_execute(c->u.command[1]);
-  } while (command_status(c->u.command[0] == 0));
+    recursive_execute(c->u.command[0], input, output);
+    if (command_status(c->u.command[0]) == 0)
+	recursive_execute(c->u.command[1], input, output);
+  } while (command_status(c->u.command[0]) == 0);
 
+  // Set exit status to appropriate body/conditional exit status
   if (command_status(c->u.command[1]) != -1)
     c->status = command_status(c->u.command[1]);
   else 
@@ -156,12 +168,14 @@ void execute_while(command_t c, int input, int output)
 
 void execute_until(command_t c, int input, int output)
 {
+  // Execute conditional. While conditional is false, execute body
   do { 
-    recursive_execute(c->u.command[0]);
-    if (command_status(c->u.command[0] != 0))
-	recursive_execute(c->u.command[1]);
-  } while (command_status(c->u.command[0] != 0));
+    recursive_execute(c->u.command[0], input, output);
+    if (command_status(c->u.command[0]) != 0)
+	recursive_execute(c->u.command[1], input, output);
+  } while (command_status(c->u.command[0]) != 0);
 
+  // Set exit status to appropriate body/conditional exit status
   if (command_status(c->u.command[1]) != -1)
     c->status = command_status(c->u.command[1]);
   else 
@@ -170,6 +184,13 @@ void execute_until(command_t c, int input, int output)
 
 void execute_simple(command_t c, int input, int output)
 {
-  
+  // Do something with input output
+  if (c->input != NULL) {
+  }
+
+
+  // Execute simple command, set exit status
+  int exit = exec_wait(c->u.word);
+  c->status = exit;
 }
 

@@ -50,21 +50,21 @@ void execute_command (command_t, int);
    been executed.  Wait for the command, if it is not already finished.  */
 int command_status (command_t);
 
-void recursive_execute(command_t);
+void recursive_execute(command_t, int, int);
 
-void execute_sequence(command_t);
+void execute_sequence(command_t, int, int);
 
-void execute_pipe(command_t);
+void execute_pipe(command_t, int, int);
 
-void execute_subshell(command_t);
+void execute_subshell(command_t, int, int);
 
-void execute_if(command_t);
+void execute_if(command_t, int, int);
 
-void execute_while(command_t);
+void execute_while(command_t, int, int);
 
-void execute_until(command_t);
+void execute_until(command_t, int, int);
 
-void execute_simple(command_t);
+void execute_simple(command_t, int, int);
 
 
 #endif // _COMMAND_H_
