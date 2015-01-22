@@ -20,12 +20,11 @@
 
 #include "error.h"
 
-/* FIXME: You may need to add #include directives, macro definitions,
-   static function definitions, etc.  */
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <fcntl.h>
 
 int
 prepare_profiling (char const *name)
@@ -83,35 +82,27 @@ recursive_execute(command_t c, int input, int output)
 
 }
 
-int exec_wait(char* const * cname) {
-  int status;
-
-  pid_t pid = fork();
-  if(pid < 0) {
-      error(1, 0, "Failed to fork");
-  }
-
-  else if(pid > 0) {
-    waitpid(pid, &status, 0);
-    return WEXITSTATUS(&status);
-  }
-
-  else {
-    execvp(cname[0], cname);
-    fprintf(stderr, "%s: Command not found\n", cname[0]);
-    _exit(127);
-  }
-  return -1;
-}
-
 void execute_sequence(command_t c, int input, int output)
 {
+  // Open input/output files
+  if (c->input != NULL)
+    input = open(c->input, O_RDONLY);
+  if (c->output != NULL)
+    output = open(c->output, O_RDONLY | O_TRUNC | O_CREAT, 
+		  S_IRUSR | S_IWUSR | S_IXUSR);
+  
   // Execute first command, then second command
   recursive_execute(c->u.command[0], input, output);
   recursive_execute(c->u.command[1], input, output);
 
   // Set exit status to exit status of second command
   c->status = command_status(c->u.command[1]);
+
+  // Close any open input/output files
+  if (c->input != NULL)
+    close(input);
+  if (c->output != NULL)
+    close(output);
 }
 
 void execute_pipe(command_t c, int input, int output)
@@ -123,12 +114,32 @@ void execute_pipe(command_t c, int input, int output)
 
 void execute_subshell(command_t c, int input, int output)
 {
+  // Open input/output files
+  if (c->input != NULL)
+    input = open(c->input, O_RDONLY);
+  if (c->output != NULL)
+    output = open(c->output, O_RDONLY | O_TRUNC | O_CREAT, 
+		  S_IRUSR | S_IWUSR | S_IXUSR);
 
+  // SOMETHING HERE
+  
+  // Close any open input/output files
+  if (c->input != NULL)
+    close(input);
+  if (c->output != NULL)
+    close(output);
 
 }
 
 void execute_if(command_t c, int input, int output)
 {
+  // Open input/output files
+  if (c->input != NULL)
+    input = open(c->input, O_RDONLY);
+  if (c->output != NULL)
+    output = open(c->output, O_RDONLY | O_TRUNC | O_CREAT, 
+		  S_IRUSR | S_IWUSR | S_IXUSR);
+
   // Execute conditional
   recursive_execute(c->u.command[0], input, output);
 
@@ -144,14 +155,28 @@ void execute_if(command_t c, int input, int output)
     c->status = command_status(c->u.command[2]);
   }
 
-  // Conditional is false, no else statement. Exit status is conditional's exit status
+  // Conditional is false, no else statement. 
+  // Exit status is conditional's exit status
   else {
     c->status = command_status(c->u.command[0]);
   }
+
+  // Close any open input/output file
+  if (c->input != NULL)
+    close(input);
+  if (c->output != NULL)
+    close(output);
 }
 
 void execute_while(command_t c, int input, int output)
 {
+  // Open input/output files
+  if (c->input != NULL)
+    input = open(c->input, O_RDONLY);
+  if (c->output != NULL)
+    output = open(c->output, O_RDONLY | O_TRUNC | O_CREAT, 
+		  S_IRUSR | S_IWUSR | S_IXUSR);
+
   // Execute conditional. While conditional is true, execute body
   do { 
     recursive_execute(c->u.command[0], input, output);
@@ -164,10 +189,23 @@ void execute_while(command_t c, int input, int output)
     c->status = command_status(c->u.command[1]);
   else 
     c->status = command_status(c->u.command[0]);
+
+  // Close any open input/output file
+  if (c->input != NULL)
+    close(input);
+  if (c->output != NULL)
+    close(output);
 }
 
 void execute_until(command_t c, int input, int output)
 {
+  // Open input/output files
+  if (c->input != NULL)
+    input = open(c->input, O_RDONLY);
+  if (c->output != NULL)
+    output = open(c->output, O_RDONLY | O_TRUNC | O_CREAT, 
+		  S_IRUSR | S_IWUSR | S_IXUSR);
+
   // Execute conditional. While conditional is false, execute body
   do { 
     recursive_execute(c->u.command[0], input, output);
@@ -180,17 +218,54 @@ void execute_until(command_t c, int input, int output)
     c->status = command_status(c->u.command[1]);
   else 
     c->status = command_status(c->u.command[0]);
+
+  // Close any open input/output file
+  if (c->input != NULL)
+    close(input);
+  if (c->output != NULL)
+    close(output);
 }
 
 void execute_simple(command_t c, int input, int output)
 {
-  // Do something with input output
-  if (c->input != NULL) {
+  // Open input/output files
+  if (c->input != NULL)
+    input = open(c->input, O_RDONLY);
+  if (c->output != NULL)
+    output = open(c->output, O_RDONLY | O_TRUNC | O_CREAT, 
+		  S_IRUSR | S_IWUSR | S_IXUSR);
+
+  // Fork
+  int status;
+  pid_t pid = fork();
+
+  // Error while forking
+  if(pid < 0) {
+      error(1, 0, "Failed to fork");
   }
 
+  // Parent. Wait for child. Set exit status to child exit status
+  else if(pid > 0) {
+    waitpid(pid, &status, 0);
+    c->status = WEXITSTATUS(&status);
+  }
 
-  // Execute simple command, set exit status
-  int exit = exec_wait(c->u.word);
-  c->status = exit;
+  // Child. Execute command
+  else {
+    if (input != -1)
+      dup2(input, STDIN_FILENO);
+    if (output != -1)
+      dup2(output, STDOUT_FILENO);
+    execvp(c->u.word[0], c->u.word);
+    fprintf(stderr, "%s: Command not found\n", c->u.word[0]);
+    _exit(127);
+  }
+
+  // Close any open input/output file
+  if (c->input != NULL)
+    close(input);
+  if (c->output != NULL)
+    close(output);
+
 }
 
