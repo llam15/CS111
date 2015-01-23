@@ -182,10 +182,12 @@ void execute_subshell(command_t c, int input, int output)
   // Parent. Wait for child. Set exit status to child exit status
   else {
     waitpid(pid, &status, 0);
-    if (WIFEXITED(&status))
-      c->status = WEXITSTATUS(&status);
+     if (WIFEXITED(status))
+      c->status = WEXITSTATUS(status);
+    else if (WIFSIGNALED(status))
+      c->status = WTERMSIG(status);
     else
-      c->status = status;
+      c->status = WSTOPSIG(status);
   }
 
   // Close any open input/output files
@@ -333,10 +335,12 @@ void execute_simple(command_t c, int input, int output)
   // Parent. Wait for child. Set exit status to child exit status
   else {
     waitpid(pid, &status, 0);
-    if (WIFEXITED(&status))
-      c->status = WEXITSTATUS(&status);
+    if (WIFEXITED(status))
+      c->status = WEXITSTATUS(status);
+    else if (WIFSIGNALED(status))
+      c->status = WTERMSIG(status);
     else
-      c->status = status;
+      c->status = WSTOPSIG(status);
   }
 
   // Close any open input/output file
