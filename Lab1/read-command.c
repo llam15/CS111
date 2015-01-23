@@ -50,6 +50,9 @@ make_command_stream (int (*get_next_byte) (void *),
   TokenList_t token_list;
   lexer_get_tokens(&token_list);
 
+  if (token_list.num_tokens == 0)
+    return NULL;
+
   command_stream_t stream = (command_stream_t) checked_malloc(sizeof(struct command_stream));
   stream->list_size = 64;
   stream->command_tree_list = (command_t) checked_malloc(sizeof(struct command)*stream->list_size);
@@ -94,7 +97,7 @@ command_t
 read_command_stream (command_stream_t s)
 {
   // Return next command in array
-  if (s->read_index < s->list_size) {
+  if (s != NULL && s->read_index < s->list_size) {
     return s->command_tree_list + s->read_index++;
   }
 
