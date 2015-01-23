@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <fcntl.h>
+#include <stdlib.h>
 
 int
 prepare_profiling (char const *name)
@@ -88,7 +89,7 @@ void execute_sequence(command_t c, int input, int output)
   if (c->input != NULL)
     input = open(c->input, O_RDONLY);
   if (c->output != NULL)
-    output = open(c->output, O_RDONLY | O_TRUNC | O_CREAT, 
+    output = open(c->output, O_WRONLY | O_TRUNC | O_CREAT, 
 		  S_IRUSR | S_IWUSR | S_IXUSR);
   
   // Execute first command, then second command
@@ -107,8 +108,49 @@ void execute_sequence(command_t c, int input, int output)
 
 void execute_pipe(command_t c, int input, int output)
 {
-  // SOMETHING HERE
+  int status;
+  int fd[2];
+  pid_t pid_left, pid_right;
+  // Create pipe
+  pipe(fd);
 
+  // Fork for left side of pipe
+  pid_left = fork();
+
+  // Check fork
+  if (pid_left < 0)
+      error(1, 0, "Fatal Error: Failed to fork");
+  
+  // Execute left child
+  else if (pid_left == 0) {
+    close(fd[0]);
+    recursive_execute(c->u.command[0], input, fd[1]);
+    exit(command_status(c->u.command[0]));
+  }
+  
+  // Parent. Fork again for right child
+  else {
+    pid_right = fork();
+
+    // Check fork
+    if (pid_right < 0)
+      error(1, 0 , "Fatal Error: Failed to fork");
+
+    // Execute right child
+    else if (pid_right == 0) {
+      close(fd[1]);
+      recursive_execute(c->u.command[1], fd[0], output);
+      exit(command_status(c->u.command[1]));
+    }
+
+    //Parent. Wait for left and right children.
+    else {
+      waitpid(pid_left, &status, 0);
+      waitpid(pid_right, &status, 0);
+      WEXITSTATUS(&status);
+      c->u.command[1]->status = status;
+    }
+  }
   c->status = command_status(c->u.command[1]);
 }
 
@@ -203,7 +245,7 @@ void execute_until(command_t c, int input, int output)
   if (c->input != NULL)
     input = open(c->input, O_RDONLY);
   if (c->output != NULL)
-    output = open(c->output, O_RDONLY | O_TRUNC | O_CREAT, 
+    output = open(c->output, O_WRONLY | O_TRUNC | O_CREAT, 
 		  S_IRUSR | S_IWUSR | S_IXUSR);
 
   // Execute conditional. While conditional is false, execute body
@@ -232,7 +274,7 @@ void execute_simple(command_t c, int input, int output)
   if (c->input != NULL)
     input = open(c->input, O_RDONLY);
   if (c->output != NULL)
-    output = open(c->output, O_RDONLY | O_TRUNC | O_CREAT, 
+    output = open(c->output, O_WRONLY | O_TRUNC | O_CREAT, 
 		  S_IRUSR | S_IWUSR | S_IXUSR);
 
   // Fork
@@ -240,22 +282,28 @@ void execute_simple(command_t c, int input, int output)
   pid_t pid = fork();
 
   // Error while forking
-  if(pid < 0) {
-      error(1, 0, "Failed to fork");
+  if (pid < 0) {
+      error(1, 0, "Fatal Error: Failed to fork");
   }
 
   // Parent. Wait for child. Set exit status to child exit status
-  else if(pid > 0) {
+  else if (pid > 0) {
     waitpid(pid, &status, 0);
-    c->status = WEXITSTATUS(&status);
+    WEXITSTATUS(&status);
+    c->status = status;
   }
 
   // Child. Execute command
   else {
+    // Redirect input if needed
     if (input != -1)
       dup2(input, STDIN_FILENO);
+
+    // Redirect output if needed
     if (output != -1)
       dup2(output, STDOUT_FILENO);
+
+    // Execute command
     execvp(c->u.word[0], c->u.word);
     fprintf(stderr, "%s: Command not found\n", c->u.word[0]);
     _exit(127);
@@ -266,6 +314,5 @@ void execute_simple(command_t c, int input, int output)
     close(input);
   if (c->output != NULL)
     close(output);
-
 }
 
