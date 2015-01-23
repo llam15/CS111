@@ -167,6 +167,7 @@ void lexer_putchar(char c)
 {
     static bool consume_switch = false;
     static char last_c = '\0';
+    static char last_special = '\0';
 
     // return to caller whilst consuming comments until a newline
     if(consume_switch)
@@ -182,18 +183,18 @@ void lexer_putchar(char c)
     case ' ':
     case '\t':
       lexer_putchar_i('\0');
-    break;
+      break;
     // Error if previous character was also redirect command. Following token must be interpreted as TOK_WORD 
     case '>':
     case '<':
       if (strchr("<>", last_c))
 	error(1,0,"%"PRIu64": Syntax error: Unexpected newline\n", line_num);
-    lexer_putchar_i('\0');
-    simple_command = false;
-    lexer_putchar_i(c);
-    lexer_putchar_i('\0');
-    simple_command = true;
-    break;
+      lexer_putchar_i('\0');
+      simple_command = false;
+      lexer_putchar_i(c);
+      lexer_putchar_i('\0');
+      simple_command = true;
+      break;
     // Error if previous character was redirect comand. Otherwise, consume unnecessary newlines. Replace with semicolon when applicable
     case '\n':
       if (strchr("<>", last_c))
@@ -201,7 +202,7 @@ void lexer_putchar(char c)
       line_num++;
       lexer_putchar_i('\0');
       simple_command = false;
-      if (strchr("\n(|\0", last_c) || is_reserved(lexertokens.tokens[lexertokens.num_tokens-1]))
+      if (strchr("\n(|\0", last_c) || is_reserved(lexertokens.tokens[lexertokens.num_tokens-1]) || last_special == ';')
 	break;
 
       if (is_command > 0 && !is_reserved(lexertokens.tokens[lexertokens.num_tokens-1])) {
@@ -216,15 +217,15 @@ void lexer_putchar(char c)
     case ')':
       if (strchr("<>", last_c))
 	error(1,0,"%"PRIu64": Syntax error: Unexpected newline\n", line_num);
-    lexer_putchar_i('\0');
-    simple_command = false;
-    lexer_putchar_i(c);
-    lexer_putchar_i('\0');
-    break;
+      lexer_putchar_i('\0');
+      simple_command = false;
+      lexer_putchar_i(c);
+      lexer_putchar_i('\0');
+      break;
     // Comment character. Consume following tokens until (but not including) newline
     case '#':
       simple_command = false;
-      if(strchr(" \t\n;|()", last_c))
+      if(strchr(" \t\n;|()\0", last_c))
 	consume_switch = true;
       else
 	error(1,0,"%"PRIu64": Syntax error: Invalid character `%c'\n", line_num, c);
@@ -240,12 +241,20 @@ void lexer_putchar(char c)
         }
       break; 
     }
+    if (!strchr(" \t\n", c))
+      last_special = c;
 
     last_c = c;
 }
 
 void lexer_get_tokens(TokenList_t* tokens)
 {
+  /*  
+  int i;
+  for (i = 0; i < lexertokens.num_tokens; i++)
+    printf("%s\n", lexerbuf + lexertokens.tokens[i].offset);
+  */
+
   // Copy lexer information to tokens
   tokens->token_buffer = lexerbuf;
   tokens->tokens = lexertokens.tokens;
