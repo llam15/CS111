@@ -1,3 +1,3 @@
 # CS111
 
-The ultimate implementation of a profiling shell script ever written ever!
+CS111: Operating Systems Projects
