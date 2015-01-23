@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <string.h>
 
 int
 prepare_profiling (char const *name)
@@ -46,9 +47,6 @@ command_status (command_t c)
 void
 execute_command (command_t c, int profiling)
 {
-  /* FIXME: Replace this with your implementation, like 'prepare_profiling'.  */
-  //  error (1, 0, "command execution not yet implemented");
-
   recursive_execute(c, -1, -1);
 }
 
@@ -145,10 +143,14 @@ void execute_pipe(command_t c, int input, int output)
 
     //Parent. Wait for left and right children.
     else {
+      close(fd[0]);
+      close(fd[1]);
       waitpid(pid_left, &status, 0);
       waitpid(pid_right, &status, 0);
-      WEXITSTATUS(&status);
-      c->u.command[1]->status = status;
+      if (WIFEXITED(&status))
+	c->u.command[1]->status = WEXITSTATUS(&status);
+      else
+	c->u.command[1]->status = status;
     }
   }
   c->status = command_status(c->u.command[1]);
@@ -163,8 +165,29 @@ void execute_subshell(command_t c, int input, int output)
     output = open(c->output, O_RDONLY | O_TRUNC | O_CREAT, 
 		  S_IRUSR | S_IWUSR | S_IXUSR);
 
-  // SOMETHING HERE
-  
+  // Fork
+  int status;
+  pid_t pid = fork();
+
+  // Check fork
+  if (pid < 0)
+    error(1, 0 , "Fatal Error: Failed to fork");
+
+  // Child. Execute commands
+  else if (pid  == 0 ) {
+    recursive_execute(c->u.command[0], input, output);
+    exit(command_status(c->u.command[0]));
+  }
+
+  // Parent. Wait for child. Set exit status to child exit status
+  else {
+    waitpid(pid, &status, 0);
+    if (WIFEXITED(&status))
+      c->status = WEXITSTATUS(&status);
+    else
+      c->status = status;
+  }
+
   // Close any open input/output files
   if (c->input != NULL)
     close(input);
@@ -277,6 +300,11 @@ void execute_simple(command_t c, int input, int output)
     output = open(c->output, O_WRONLY | O_TRUNC | O_CREAT, 
 		  S_IRUSR | S_IWUSR | S_IXUSR);
 
+  if (!strcmp(c->u.word[0], ":")) { 
+    c->status = 0;
+    return;
+  }
+
   // Fork
   int status;
   pid_t pid = fork();
@@ -286,15 +314,8 @@ void execute_simple(command_t c, int input, int output)
       error(1, 0, "Fatal Error: Failed to fork");
   }
 
-  // Parent. Wait for child. Set exit status to child exit status
-  else if (pid > 0) {
-    waitpid(pid, &status, 0);
-    WEXITSTATUS(&status);
-    c->status = status;
-  }
-
   // Child. Execute command
-  else {
+  else if (pid == 0) {
     // Redirect input if needed
     if (input != -1)
       dup2(input, STDIN_FILENO);
@@ -307,6 +328,15 @@ void execute_simple(command_t c, int input, int output)
     execvp(c->u.word[0], c->u.word);
     fprintf(stderr, "%s: Command not found\n", c->u.word[0]);
     _exit(127);
+  }
+
+  // Parent. Wait for child. Set exit status to child exit status
+  else {
+    waitpid(pid, &status, 0);
+    if (WIFEXITED(&status))
+      c->status = WEXITSTATUS(&status);
+    else
+      c->status = status;
   }
 
   // Close any open input/output file
