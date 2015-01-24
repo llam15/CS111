@@ -188,7 +188,7 @@ void lexer_putchar(char c)
     case '>':
     case '<':
       if (strchr("<>", last_c))
-	error(1,0,"%"PRIu64": Syntax error: Unexpected newline\n", line_num);
+	error(1,0,"%"PRIu64": Syntax error: Unexpected `%c'\n", line_num,c);
       lexer_putchar_i('\0');
       simple_command = false;
       lexer_putchar_i(c);
@@ -197,7 +197,7 @@ void lexer_putchar(char c)
       break;
     // Error if previous character was redirect comand. Otherwise, consume unnecessary newlines. Replace with semicolon when applicable
     case '\n':
-      if (strchr("<>", last_c))
+      if (strchr("<>", last_c) && last_c != '\0')
 	error(1,0,"%"PRIu64": Syntax error: Unexpected newline\n", line_num);
       line_num++;
       lexer_putchar_i('\0');
@@ -216,7 +216,7 @@ void lexer_putchar(char c)
     case '(':
     case ')':
       if (strchr("<>", last_c))
-	error(1,0,"%"PRIu64": Syntax error: Unexpected newline\n", line_num);
+	error(1,0,"%"PRIu64": Syntax error: Unexpected `%c'\n", line_num,c);
       lexer_putchar_i('\0');
       simple_command = false;
       lexer_putchar_i(c);
