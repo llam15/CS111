@@ -163,7 +163,7 @@ void execute_subshell(command_t c, int input, int output)
   if (c->input != NULL)
     input = open(c->input, O_RDONLY);
   if (c->output != NULL)
-    output = open(c->output, O_RDONLY | O_TRUNC | O_CREAT, 
+    output = open(c->output, O_WRONLY | O_TRUNC | O_CREAT, 
 		  S_IRUSR | S_IWUSR | S_IXUSR);
 
   // Fork
@@ -205,7 +205,7 @@ void execute_if(command_t c, int input, int output)
   if (c->input != NULL)
     input = open(c->input, O_RDONLY);
   if (c->output != NULL)
-    output = open(c->output, O_RDONLY | O_TRUNC | O_CREAT, 
+    output = open(c->output, O_WRONLY | O_TRUNC | O_CREAT, 
 		  S_IRUSR | S_IWUSR | S_IXUSR);
 
   // Execute conditional
@@ -242,7 +242,7 @@ void execute_while(command_t c, int input, int output)
   if (c->input != NULL)
     input = open(c->input, O_RDONLY);
   if (c->output != NULL)
-    output = open(c->output, O_RDONLY | O_TRUNC | O_CREAT, 
+    output = open(c->output, O_WRONLY | O_TRUNC | O_CREAT, 
 		  S_IRUSR | S_IWUSR | S_IXUSR);
 
   // Execute conditional. While conditional is true, execute body
