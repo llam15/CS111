@@ -28,6 +28,22 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <sys/time.h>
+#include <sys/resource.h>
+
+static int log_file;
+typedef struct
+{
+  struct timespec finish_time;
+  struct timespec real_time_start;
+  struct timespec real_time_end;
+  struct rusage usage_times;
+  //Union maybe??
+  char **command;
+  int pid;
+} profile_times;
+
 
 int
 prepare_profiling (char const *name)
@@ -35,8 +51,44 @@ prepare_profiling (char const *name)
   /* FIXME: Replace this with your implementation.  You may need to
      add auxiliary functions and otherwise modify the source code.
      You can also use external functions defined in the GNU C Library.  */
-  error (0, 0, "warning: profiling not yet implemented");
-  return -1;
+  //  error (0, 0, "warning: profiling not yet implemented");
+  //  return -1;
+  return open(name, O_WRONLY | O_CREAT | O_TRUNC,
+	      S_IRUSR | S_IWUSR | S_IXUSR);
+}
+
+void
+write_log(const profile_times *times)
+{
+  char buf[1024];
+  int num_chars = -1;
+
+  //NEED TO IMPLEMENT
+  //  if (times->command == NULL) {
+    num_chars = snprintf(buf, 1023, "%lld", (long long) times->finish_time.tv_sec);
+    //}
+    //else {
+    // num_chars = snprintf(buf, 1023, "");
+    //}
+  //Need to put inside if statements?
+  if (num_chars < 0)
+    error(1, 0, "Error while writing to log.\n");
+
+  struct flock lock;
+  lock.l_type = F_WRLCK;
+  lock.l_whence = SEEK_SET;
+  lock.l_start = 0;
+  lock.l_len = 0;
+  lock.l_pid = getpid();
+
+  fcntl(log_file, F_SETLKW, &lock);
+
+  write(log_file, buf, num_chars > 1023? 1023 : num_chars);
+  write(log_file, "\n", 1);
+
+  lock.l_type = F_UNLCK;
+  fcntl(log_file, F_SETLK, &lock);
+
 }
 
 int
@@ -48,7 +100,21 @@ command_status (command_t c)
 void
 execute_command (command_t c, int profiling)
 {
+  profile_times pt;
+  pt.command = NULL;
+  pt.pid = getpid();
+
+  log_file = profiling;
+
+  clock_gettime(CLOCK_MONOTONIC, &pt.real_time_start);
+
   recursive_execute(c, -1, -1);
+
+  clock_gettime(CLOCK_MONOTONIC, &pt.real_time_end);
+  clock_gettime(CLOCK_REALTIME, &pt.finish_time);
+  getrusage(RUSAGE_SELF, &pt.usage_times);
+
+  write_log(&pt);
 }
 
 void
@@ -83,26 +149,13 @@ recursive_execute(command_t c, int input, int output)
 }
 
 void execute_sequence(command_t c, int input, int output)
-{
-  // Open input/output files
-  if (c->input != NULL)
-    input = open(c->input, O_RDONLY);
-  if (c->output != NULL)
-    output = open(c->output, O_WRONLY | O_TRUNC | O_CREAT, 
-		  S_IRUSR | S_IWUSR | S_IXUSR);
-  
+{  
   // Execute first command, then second command
   recursive_execute(c->u.command[0], input, output);
   recursive_execute(c->u.command[1], input, output);
 
   // Set exit status to exit status of second command
   c->status = command_status(c->u.command[1]);
-
-  // Close any open input/output files
-  if (c->input != NULL)
-    close(input);
-  if (c->output != NULL)
-    close(output);
 }
 
 void execute_pipe(command_t c, int input, int output)
@@ -110,8 +163,16 @@ void execute_pipe(command_t c, int input, int output)
   int status;
   int fd[2];
   pid_t pid_left, pid_right;
+  profile_times pt_left, pt_right;
+
+  pt_left.command = NULL;
+  pt_right.command = NULL;
+  
   // Create pipe
   pipe(fd);
+
+  // Beginning of real time
+  clock_gettime(CLOCK_MONOTONIC, &pt_left.real_time_start);
 
   // Fork for left side of pipe
   pid_left = fork();
@@ -146,12 +207,28 @@ void execute_pipe(command_t c, int input, int output)
     else {
       close(fd[0]);
       close(fd[1]);
+
       waitpid(pid_left, &status, 0);
+      clock_gettime(CLOCK_MONOTONIC, &pt_left.real_time_end);
+      clock_gettime(CLOCK_REALTIME, &pt_left.finish_time);
+      getrusage(RUSAGE_CHILDREN, &pt_left.usage_times);
+      pt_left.pid = pid_left;
+      
       waitpid(pid_right, &status, 0);
-      if (WIFEXITED(&status))
-	c->u.command[1]->status = WEXITSTATUS(&status);
+      clock_gettime(CLOCK_MONOTONIC, &pt_right.real_time_end);
+      clock_gettime(CLOCK_REALTIME, &pt_right.finish_time);
+      getrusage(RUSAGE_CHILDREN, &pt_right.usage_times);
+      pt_right.pid = pid_right;
+      
+      write_log(&pt_left);
+      write_log(&pt_right);
+      
+      if (WIFEXITED(status))
+	c->u.command[1]->status = WEXITSTATUS(status);
+      else if (WIFSIGNALED(status))
+	c->u.command[1]->status = WTERMSIG(status);
       else
-	c->u.command[1]->status = status;
+	c->u.command[1]->status = WSTOPSIG(status);
     }
   }
   c->status = command_status(c->u.command[1]);
@@ -168,6 +245,11 @@ void execute_subshell(command_t c, int input, int output)
 
   // Fork
   int status;
+  profile_times pt;
+  pt.command = NULL;
+  pt.pid = getpid();
+  clock_gettime(CLOCK_MONOTONIC, &pt.real_time_start);
+  
   pid_t pid = fork();
 
   // Check fork
@@ -183,7 +265,12 @@ void execute_subshell(command_t c, int input, int output)
   // Parent. Wait for child. Set exit status to child exit status
   else {
     waitpid(pid, &status, 0);
-     if (WIFEXITED(status))
+    clock_gettime(CLOCK_MONOTONIC, &pt.real_time_end);
+    clock_gettime(CLOCK_REALTIME, &pt.finish_time);
+    getrusage(RUSAGE_SELF, &pt.usage_times);
+    write_log(&pt);
+    
+    if (WIFEXITED(status))
       c->status = WEXITSTATUS(status);
     else if (WIFSIGNALED(status))
       c->status = WTERMSIG(status);
@@ -196,7 +283,6 @@ void execute_subshell(command_t c, int input, int output)
     close(input);
   if (c->output != NULL)
     close(output);
-
 }
 
 void execute_if(command_t c, int input, int output)
@@ -303,7 +389,15 @@ void execute_simple(command_t c, int input, int output)
     output = open(c->output, O_WRONLY | O_TRUNC | O_CREAT, 
 		  S_IRUSR | S_IWUSR | S_IXUSR);
 
+  profile_times pt;
+  pt.command = c->u.word;
+  clock_gettime(CLOCK_MONOTONIC, &pt.real_time_start);
+  
   if (!strcmp(c->u.word[0], ":")) { 
+    clock_gettime(CLOCK_MONOTONIC, &pt.real_time_end);
+    clock_gettime(CLOCK_REALTIME, &pt.finish_time);
+    getrusage(RUSAGE_SELF, &pt.usage_times);
+    write_log(&pt);
     c->status = 0;
     return;
   }
@@ -336,6 +430,11 @@ void execute_simple(command_t c, int input, int output)
   // Parent. Wait for child. Set exit status to child exit status
   else {
     waitpid(pid, &status, 0);
+    clock_gettime(CLOCK_MONOTONIC, &pt.real_time_end);
+    clock_gettime(CLOCK_REALTIME, &pt.finish_time);
+    getrusage(RUSAGE_SELF, &pt.usage_times);
+    write_log(&pt);
+
     if (WIFEXITED(status))
       c->status = WEXITSTATUS(status);
     else if (WIFSIGNALED(status))
