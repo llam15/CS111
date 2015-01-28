@@ -23,6 +23,7 @@ CC = gcc
 WERROR_CFLAGS = -Werror
 #CFLAGS = -g -Wall -Wextra $(WERROR_CFLAGS)
 CFLAGS = -g -Wall -Wextra
+LFLAGS = -lrt
 LAB = 1
 DISTDIR = lab1-$(USER)
 CHECK_DIST = ./check-dist
@@ -49,7 +50,7 @@ DIST_SOURCES = \
   $(TESTS) check-dist COPYING README
 
 profsh: $(PROFSH_OBJECTS)
-	$(CC) $(CFLAGS) -o $@ $(PROFSH_OBJECTS)
+	$(CC) $(CFLAGS) $(LFLAGS) -o $@ $(PROFSH_OBJECTS)
 
 alloc.o: alloc.h
 execute-command.o main.o print-command.o read-command.o: command.h
