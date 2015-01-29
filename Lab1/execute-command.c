@@ -39,11 +39,12 @@ typedef struct
   struct timespec real_time_start;
   struct timespec real_time_end;
   struct rusage usage_times;
-  //Union maybe??
   char **command;
   int pid;
 } profile_times;
 
+#define BILLION 1000000000.0
+#define MILLION 1000000.0
 
 int
 prepare_profiling (char const *name)
@@ -63,17 +64,24 @@ write_log(const profile_times *times)
   char buf[1024];
   int num_chars = -1;
 
+  double completion_time = times->finish_time.tv_sec + times->finish_time.tv_nsec/BILLION;
+  double real_time = (times->real_time_end.tv_sec + times->real_time_end.tv_nsec/BILLION) - 
+    (times->real_time_start.tv_sec + times->real_time_end.tv_nsec/BILLION);
+  double user_time = times->usage_times.ru_utime.tv_sec +
+    times->usage_times.ru_utime.tv_usec/MILLION;
+  double sys_time = times->usage_times.ru_stime.tv_sec + 
+    times->usage_times.ru_stime.tv_usec/MILLION;
+  
   //NEED TO IMPLEMENT
-  //  if (times->command == NULL) {
-    num_chars = snprintf(buf, 1023, "%lld", (long long) times->finish_time.tv_sec);
-    //}
-    //else {
-    // num_chars = snprintf(buf, 1023, "");
-    //}
-  //Need to put inside if statements?
-  if (num_chars < 0)
-    error(1, 0, "Error while writing to log.\n");
-
+   if (times->command == NULL) {
+     num_chars = snprintf(buf, 1023, "%f %f %f %f [%d]", completion_time, real_time, user_time, sys_time, times->pid);
+     if (num_chars < 0)
+       error(1, 0, "Error while writing to log.\n");
+   }
+   else {
+     num_chars = snprintf(buf, 1023, "%f %f %f %f %s", completion_time, real_time, user_time, sys_time, times->command[0]);
+   }
+  
   struct flock lock;
   lock.l_type = F_WRLCK;
   lock.l_whence = SEEK_SET;
@@ -103,7 +111,10 @@ execute_command (command_t c, int profiling)
   profile_times pt;
   pt.command = NULL;
   pt.pid = getpid();
-
+  clock_getres(CLOCK_MONOTONIC, &pt.real_time_start);
+  clock_getres(CLOCK_MONOTONIC, &pt.real_time_end);
+  clock_getres(CLOCK_REALTIME, &pt.finish_time);
+  
   log_file = profiling;
 
   clock_gettime(CLOCK_MONOTONIC, &pt.real_time_start);
@@ -167,6 +178,15 @@ void execute_pipe(command_t c, int input, int output)
 
   pt_left.command = NULL;
   pt_right.command = NULL;
+
+  clock_getres(CLOCK_MONOTONIC, &pt_left.real_time_start);
+  clock_getres(CLOCK_MONOTONIC, &pt_left.real_time_end);
+  clock_getres(CLOCK_REALTIME, &pt_left.finish_time);
+
+  clock_getres(CLOCK_MONOTONIC, &pt_right.real_time_start);
+  clock_getres(CLOCK_MONOTONIC, &pt_right.real_time_end);
+  clock_getres(CLOCK_REALTIME, &pt_right.finish_time);
+
   
   // Create pipe
   pipe(fd);
@@ -248,6 +268,10 @@ void execute_subshell(command_t c, int input, int output)
   profile_times pt;
   pt.command = NULL;
   pt.pid = getpid();
+  clock_getres(CLOCK_MONOTONIC, &pt.real_time_start);
+  clock_getres(CLOCK_MONOTONIC, &pt.real_time_end);
+  clock_getres(CLOCK_REALTIME, &pt.finish_time);
+
   clock_gettime(CLOCK_MONOTONIC, &pt.real_time_start);
   
   pid_t pid = fork();
@@ -391,6 +415,10 @@ void execute_simple(command_t c, int input, int output)
 
   profile_times pt;
   pt.command = c->u.word;
+  clock_getres(CLOCK_MONOTONIC, &pt.real_time_start);
+  clock_getres(CLOCK_MONOTONIC, &pt.real_time_end);
+  clock_getres(CLOCK_REALTIME, &pt.finish_time);
+
   clock_gettime(CLOCK_MONOTONIC, &pt.real_time_start);
   
   if (!strcmp(c->u.word[0], ":")) { 
