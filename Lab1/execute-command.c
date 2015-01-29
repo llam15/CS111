@@ -120,6 +120,7 @@ write_log(const profile_times *times)
 
   if (written != num_bytes)
     can_write = false;
+
   lock.l_type = F_UNLCK;
   fcntl(log_file, F_SETLK, &lock);
 
@@ -153,6 +154,7 @@ execute_command (command_t c, int profiling)
   getrusage(RUSAGE_SELF, &pt.usage_times);
 
   write_log(&pt);
+  //  printf("THIS\n");
 
   if (!can_write)
     exit(STAT_COULD_NOT_WRITE);
@@ -298,7 +300,6 @@ void execute_subshell(command_t c, int input, int output)
   int status;
   profile_times pt;
   pt.command = NULL;
-  pt.pid = getpid();
   clock_getres(CLOCK_MONOTONIC, &pt.real_time_start);
   clock_getres(CLOCK_MONOTONIC, &pt.real_time_end);
   clock_getres(CLOCK_REALTIME, &pt.finish_time);
@@ -323,6 +324,7 @@ void execute_subshell(command_t c, int input, int output)
     clock_gettime(CLOCK_MONOTONIC, &pt.real_time_end);
     clock_gettime(CLOCK_REALTIME, &pt.finish_time);
     getrusage(RUSAGE_SELF, &pt.usage_times);
+    pt.pid = pid;
     write_log(&pt);
     
     if (WIFEXITED(status))
