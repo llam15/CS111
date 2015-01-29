@@ -31,7 +31,9 @@
 #include <time.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <stdbool.h>
 
+static bool can_write;
 static int log_file;
 typedef struct
 {
@@ -43,8 +45,9 @@ typedef struct
   int pid;
 } profile_times;
 
-#define BILLION 1000000000.0
-#define MILLION 1000000.0
+#define BILLION (1000000000.0)
+#define MILLION (1000000.0)
+#define STAT_COULD_NOT_WRITE (1)
 
 int
 prepare_profiling (char const *name)
@@ -61,6 +64,9 @@ prepare_profiling (char const *name)
 void
 write_log(const profile_times *times)
 {
+  if (!can_write)
+    return;
+
   char buf[1024];
   int num_chars = -1;
 
@@ -72,7 +78,6 @@ write_log(const profile_times *times)
   double sys_time = times->usage_times.ru_stime.tv_sec + 
     times->usage_times.ru_stime.tv_usec/MILLION;
   
-  //NEED TO IMPLEMENT
    if (times->command == NULL) {
      num_chars = snprintf(buf, 1023, "%f %f %f %f [%d]", completion_time, real_time, user_time, sys_time, times->pid);
      if (num_chars < 0)
@@ -109,9 +114,12 @@ write_log(const profile_times *times)
 
   fcntl(log_file, F_SETLKW, &lock);
 
-  write(log_file, buf, num_chars > 1023? 1023 : num_chars);
+  int num_bytes =  num_chars > 1023 ? 1023 : num_chars;
+  int written = write(log_file, buf, num_bytes);
   write(log_file, "\n", 1);
 
+  if (written != num_bytes)
+    can_write = false;
   lock.l_type = F_UNLCK;
   fcntl(log_file, F_SETLK, &lock);
 
@@ -126,6 +134,7 @@ command_status (command_t c)
 void
 execute_command (command_t c, int profiling)
 {
+  can_write = true;
   profile_times pt;
   pt.command = NULL;
   pt.pid = getpid();
@@ -144,6 +153,9 @@ execute_command (command_t c, int profiling)
   getrusage(RUSAGE_SELF, &pt.usage_times);
 
   write_log(&pt);
+
+  if (!can_write)
+    exit(STAT_COULD_NOT_WRITE);
 }
 
 void
