@@ -80,8 +80,26 @@ write_log(const profile_times *times)
    }
    else {
      num_chars = snprintf(buf, 1023, "%f %f %f %f %s", completion_time, real_time, user_time, sys_time, times->command[0]);
+
+     if (num_chars < 0)
+       error(1,0, "Error while writing to log.\n");
+
+     int i = 1;
+     while (times->command[i] != NULL) {
+       int added;
+       if (1023-num_chars > 0)
+	 added = snprintf(buf + num_chars, 1023-num_chars, " %s", times->command[i]);
+
+       if (added < 0)
+	 error(1,0, "Error while writing to log.\n");
+       else
+	 num_chars += added;
+       i++;
+     }
+     if (num_chars < 0)
+       error(1,0, "Error while writing to log.\n");      
    }
-  
+
   struct flock lock;
   lock.l_type = F_WRLCK;
   lock.l_whence = SEEK_SET;
@@ -210,6 +228,7 @@ void execute_pipe(command_t c, int input, int output)
   
   // Parent. Fork again for right child
   else {
+    clock_gettime(CLOCK_MONOTONIC, &pt_right.real_time_start);
     pid_right = fork();
 
     // Check fork
