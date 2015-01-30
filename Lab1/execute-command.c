@@ -33,8 +33,6 @@
 #include <sys/resource.h>
 #include <stdbool.h>
 
-static bool can_write;
-static int log_file;
 typedef struct
 {
   struct timespec finish_time;
@@ -45,6 +43,11 @@ typedef struct
   int pid;
 } profile_times;
 
+static bool can_write;
+static int log_file;
+static struct timespec monotonic_res;
+static struct timespec realtime_res;
+
 #define BILLION (1000000000.0)
 #define MILLION (1000000.0)
 #define STAT_COULD_NOT_WRITE (1)
@@ -52,11 +55,6 @@ typedef struct
 int
 prepare_profiling (char const *name)
 {
-  /* FIXME: Replace this with your implementation.  You may need to
-     add auxiliary functions and otherwise modify the source code.
-     You can also use external functions defined in the GNU C Library.  */
-  //  error (0, 0, "warning: profiling not yet implemented");
-  //  return -1;
   return open(name, O_WRONLY | O_CREAT | O_TRUNC,
 	      S_IRUSR | S_IWUSR | S_IXUSR);
 }
@@ -69,22 +67,22 @@ write_log(const profile_times *times)
 
   char buf[1024];
   int num_chars = -1;
-
-  double completion_time = times->finish_time.tv_sec + times->finish_time.tv_nsec/BILLION;
-  double real_time = (times->real_time_end.tv_sec + times->real_time_end.tv_nsec/BILLION) - 
-    (times->real_time_start.tv_sec + times->real_time_end.tv_nsec/BILLION);
-  double user_time = times->usage_times.ru_utime.tv_sec +
-    times->usage_times.ru_utime.tv_usec/MILLION;
-  double sys_time = times->usage_times.ru_stime.tv_sec + 
-    times->usage_times.ru_stime.tv_usec/MILLION;
+  
+  double completion_time = (double) times->finish_time.tv_sec + (times->finish_time.tv_nsec/BILLION);
+  double real_time = ((double) times->real_time_end.tv_sec + (times->real_time_end.tv_nsec/BILLION)) - 
+    ((double) times->real_time_start.tv_sec + (times->real_time_end.tv_nsec/BILLION));
+  double user_time = (double) times->usage_times.ru_utime.tv_sec +
+    (times->usage_times.ru_utime.tv_usec/MILLION);
+  double sys_time = (double) times->usage_times.ru_stime.tv_sec + 
+    (times->usage_times.ru_stime.tv_usec/MILLION);
   
    if (times->command == NULL) {
-     num_chars = snprintf(buf, 1023, "%f %f %f %f [%d]", completion_time, real_time, user_time, sys_time, times->pid);
+     num_chars = snprintf(buf, 1023, "%0.9f %0.9f %0.6f %0.6f [%d]", completion_time, real_time, user_time, sys_time, times->pid);
      if (num_chars < 0)
        error(1, 0, "Error while writing to log.\n");
    }
    else {
-     num_chars = snprintf(buf, 1023, "%f %f %f %f %s", completion_time, real_time, user_time, sys_time, times->command[0]);
+     num_chars = snprintf(buf, 1023, "%0.9f %0.9f %0.6f %0.6f %s", completion_time, real_time, user_time, sys_time, times->command[0]);
 
      if (num_chars < 0)
        error(1,0, "Error while writing to log.\n");
@@ -135,13 +133,13 @@ command_status (command_t c)
 void
 execute_command (command_t c, int profiling)
 {
+  clock_getres(CLOCK_MONOTONIC, &monotonic_res);
+  clock_getres(CLOCK_REALTIME, &realtime_res);
+
   can_write = true;
   profile_times pt;
   pt.command = NULL;
   pt.pid = getpid();
-  clock_getres(CLOCK_MONOTONIC, &pt.real_time_start);
-  clock_getres(CLOCK_MONOTONIC, &pt.real_time_end);
-  clock_getres(CLOCK_REALTIME, &pt.finish_time);
   
   log_file = profiling;
 
@@ -151,7 +149,7 @@ execute_command (command_t c, int profiling)
 
   clock_gettime(CLOCK_MONOTONIC, &pt.real_time_end);
   clock_gettime(CLOCK_REALTIME, &pt.finish_time);
-  getrusage(RUSAGE_SELF, &pt.usage_times);
+  getrusage(RUSAGE_CHILDREN, &pt.usage_times);
 
   write_log(&pt);
   //  printf("THIS\n");
@@ -210,15 +208,6 @@ void execute_pipe(command_t c, int input, int output)
 
   pt_left.command = NULL;
   pt_right.command = NULL;
-
-  clock_getres(CLOCK_MONOTONIC, &pt_left.real_time_start);
-  clock_getres(CLOCK_MONOTONIC, &pt_left.real_time_end);
-  clock_getres(CLOCK_REALTIME, &pt_left.finish_time);
-
-  clock_getres(CLOCK_MONOTONIC, &pt_right.real_time_start);
-  clock_getres(CLOCK_MONOTONIC, &pt_right.real_time_end);
-  clock_getres(CLOCK_REALTIME, &pt_right.finish_time);
-
   
   // Create pipe
   pipe(fd);
@@ -300,9 +289,6 @@ void execute_subshell(command_t c, int input, int output)
   int status;
   profile_times pt;
   pt.command = NULL;
-  clock_getres(CLOCK_MONOTONIC, &pt.real_time_start);
-  clock_getres(CLOCK_MONOTONIC, &pt.real_time_end);
-  clock_getres(CLOCK_REALTIME, &pt.finish_time);
 
   clock_gettime(CLOCK_MONOTONIC, &pt.real_time_start);
   
@@ -323,7 +309,7 @@ void execute_subshell(command_t c, int input, int output)
     waitpid(pid, &status, 0);
     clock_gettime(CLOCK_MONOTONIC, &pt.real_time_end);
     clock_gettime(CLOCK_REALTIME, &pt.finish_time);
-    getrusage(RUSAGE_SELF, &pt.usage_times);
+    getrusage(RUSAGE_CHILDREN, &pt.usage_times);
     pt.pid = pid;
     write_log(&pt);
     
@@ -448,9 +434,6 @@ void execute_simple(command_t c, int input, int output)
 
   profile_times pt;
   pt.command = c->u.word;
-  clock_getres(CLOCK_MONOTONIC, &pt.real_time_start);
-  clock_getres(CLOCK_MONOTONIC, &pt.real_time_end);
-  clock_getres(CLOCK_REALTIME, &pt.finish_time);
 
   clock_gettime(CLOCK_MONOTONIC, &pt.real_time_start);
   
@@ -493,7 +476,7 @@ void execute_simple(command_t c, int input, int output)
     waitpid(pid, &status, 0);
     clock_gettime(CLOCK_MONOTONIC, &pt.real_time_end);
     clock_gettime(CLOCK_REALTIME, &pt.finish_time);
-    getrusage(RUSAGE_SELF, &pt.usage_times);
+    getrusage(RUSAGE_CHILDREN, &pt.usage_times);
     write_log(&pt);
 
     if (WIFEXITED(status))
