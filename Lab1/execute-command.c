@@ -69,13 +69,14 @@ write_log(const profile_times *times)
   int num_chars = -1;
   
   double completion_time = (double) times->finish_time.tv_sec + (times->finish_time.tv_nsec/BILLION);
-  double real_time = ((double) times->real_time_end.tv_sec + (times->real_time_end.tv_nsec/BILLION)) - 
-    ((double) times->real_time_start.tv_sec + (times->real_time_end.tv_nsec/BILLION));
+  double real_sec = times->real_time_end.tv_sec - times->real_time_start.tv_sec;
+  long real_nsec = times->real_time_end.tv_nsec - times->real_time_start.tv_nsec;
+  double real_time = real_sec + (real_nsec/BILLION);
   double user_time = (double) times->usage_times.ru_utime.tv_sec +
     (times->usage_times.ru_utime.tv_usec/MILLION);
   double sys_time = (double) times->usage_times.ru_stime.tv_sec + 
     (times->usage_times.ru_stime.tv_usec/MILLION);
-  
+
    if (times->command == NULL) {
      num_chars = snprintf(buf, 1023, "%0.9f %0.9f %0.6f %0.6f [%d]", completion_time, real_time, user_time, sys_time, times->pid);
      if (num_chars < 0)
