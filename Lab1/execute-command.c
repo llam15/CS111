@@ -46,7 +46,7 @@ int
 prepare_profiling (char const *name)
 {
   can_write = 1;
-  return open(name, O_WRONLY | O_CREAT | O_TRUNC,
+  return open(name, O_WRONLY | O_CREAT | O_APPEND,
 	      S_IRUSR | S_IWUSR | S_IXUSR);
 }
 
