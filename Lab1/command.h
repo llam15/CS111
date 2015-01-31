@@ -81,5 +81,6 @@ void execute_simple(command_t, int, int);
 
 void write_log(const profile_times*);
 
+int get_write_status(void);
 
 #endif // _COMMAND_H_
