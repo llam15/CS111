@@ -40,21 +40,20 @@ echo hello world | cat #outputs to cat
 
 echo hello word > file
 
-while cat file; do rm file; done
+while (test ! -s testfile.txt); do echo hello > testfile.txt; done
 
-until cat file2; do touch file2; done
+until (test ! -s testfile.txt); do rm testfile.txt; done
 
 
 (echo I am a subshell)
 
-rm hello.txt hello2.txt file2
+rm hello.txt hello2.txt file
 EOF
 
 cat >test.exp <<'EOF'
 hello
 world
 hello world
-hello word
 I am a subshell
 EOF
 
