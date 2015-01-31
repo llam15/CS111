@@ -32,21 +32,12 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <stdbool.h>
-
-typedef struct
-{
-  struct timespec finish_time;
-  struct timespec real_time_start;
-  struct timespec real_time_end;
-  struct rusage usage_times;
-  char **command;
-  int pid;
-} profile_times;
+#include <math.h>
 
 static bool can_write;
 static int log_file;
-static struct timespec monotonic_res;
-static struct timespec realtime_res;
+static int monotonic_res;
+static int realtime_res;
 
 #define BILLION (1000000000.0)
 #define MILLION (1000000.0)
@@ -78,12 +69,15 @@ write_log(const profile_times *times)
     (times->usage_times.ru_stime.tv_usec/MILLION);
 
    if (times->command == NULL) {
-     num_chars = snprintf(buf, 1023, "%0.9f %0.9f %0.6f %0.6f [%d]", completion_time, real_time, user_time, sys_time, times->pid);
+     num_chars = snprintf(buf, 1023, "%.*f %.*f %0.6f %0.6f [%d]", realtime_res, completion_time, monotonic_res, real_time, 
+			  user_time, sys_time, times->pid);
      if (num_chars < 0)
        error(1, 0, "Error while writing to log.\n");
    }
+
    else {
-     num_chars = snprintf(buf, 1023, "%0.9f %0.9f %0.6f %0.6f %s", completion_time, real_time, user_time, sys_time, times->command[0]);
+     num_chars = snprintf(buf, 1023, "%.*f %.*f %0.6f %0.6f %s", realtime_res, completion_time, monotonic_res, real_time, 
+			  user_time, sys_time, times->command[0]);
 
      if (num_chars < 0)
        error(1,0, "Error while writing to log.\n");
@@ -134,26 +128,19 @@ command_status (command_t c)
 void
 execute_command (command_t c, int profiling)
 {
-  clock_getres(CLOCK_MONOTONIC, &monotonic_res);
-  clock_getres(CLOCK_REALTIME, &realtime_res);
+  struct timespec monotonic;
+  struct timespec realtime;
+  clock_getres(CLOCK_MONOTONIC, &monotonic);
+  clock_getres(CLOCK_REALTIME, &realtime);
+
+  monotonic_res = (int) (9 - log10(monotonic.tv_nsec));
+  realtime_res = (int) (9 - log10(realtime.tv_nsec));
 
   can_write = true;
-  profile_times pt;
-  pt.command = NULL;
-  pt.pid = getpid();
   
   log_file = profiling;
 
-  clock_gettime(CLOCK_MONOTONIC, &pt.real_time_start);
-
   recursive_execute(c, -1, -1);
-
-  clock_gettime(CLOCK_MONOTONIC, &pt.real_time_end);
-  clock_gettime(CLOCK_REALTIME, &pt.finish_time);
-  getrusage(RUSAGE_CHILDREN, &pt.usage_times);
-
-  write_log(&pt);
-  //  printf("THIS\n");
 
   if (!can_write)
     exit(STAT_COULD_NOT_WRITE);
@@ -251,16 +238,14 @@ void execute_pipe(command_t c, int input, int output)
       close(fd[0]);
       close(fd[1]);
 
-      waitpid(pid_left, &status, 0);
+      wait4(pid_left, &status, 0, &pt_left.usage_times);
       clock_gettime(CLOCK_MONOTONIC, &pt_left.real_time_end);
       clock_gettime(CLOCK_REALTIME, &pt_left.finish_time);
-      getrusage(RUSAGE_CHILDREN, &pt_left.usage_times);
       pt_left.pid = pid_left;
       
-      waitpid(pid_right, &status, 0);
+      wait4(pid_right, &status, 0, &pt_right.usage_times);
       clock_gettime(CLOCK_MONOTONIC, &pt_right.real_time_end);
       clock_gettime(CLOCK_REALTIME, &pt_right.finish_time);
-      getrusage(RUSAGE_CHILDREN, &pt_right.usage_times);
       pt_right.pid = pid_right;
       
       write_log(&pt_left);
@@ -307,10 +292,9 @@ void execute_subshell(command_t c, int input, int output)
 
   // Parent. Wait for child. Set exit status to child exit status
   else {
-    waitpid(pid, &status, 0);
+    wait4(pid, &status, 0, &pt.usage_times);
     clock_gettime(CLOCK_MONOTONIC, &pt.real_time_end);
     clock_gettime(CLOCK_REALTIME, &pt.finish_time);
-    getrusage(RUSAGE_CHILDREN, &pt.usage_times);
     pt.pid = pid;
     write_log(&pt);
     
@@ -441,7 +425,7 @@ void execute_simple(command_t c, int input, int output)
   if (!strcmp(c->u.word[0], ":")) { 
     clock_gettime(CLOCK_MONOTONIC, &pt.real_time_end);
     clock_gettime(CLOCK_REALTIME, &pt.finish_time);
-    getrusage(RUSAGE_SELF, &pt.usage_times);
+    memset(&pt.usage_times, 0, sizeof(struct rusage));
     write_log(&pt);
     c->status = 0;
     return;
@@ -474,10 +458,9 @@ void execute_simple(command_t c, int input, int output)
 
   // Parent. Wait for child. Set exit status to child exit status
   else {
-    waitpid(pid, &status, 0);
+    wait4(pid, &status, 0, &pt.usage_times);
     clock_gettime(CLOCK_MONOTONIC, &pt.real_time_end);
     clock_gettime(CLOCK_REALTIME, &pt.finish_time);
-    getrusage(RUSAGE_CHILDREN, &pt.usage_times);
     write_log(&pt);
 
     if (WIFEXITED(status))
