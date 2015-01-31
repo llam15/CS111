@@ -19,9 +19,22 @@
 #define _COMMAND_H_
 
 #include "command-internals.h"
+#include <time.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 typedef struct command *command_t;
 typedef struct command_stream *command_stream_t;
+
+typedef struct
+{
+  struct timespec finish_time;
+  struct timespec real_time_start;
+  struct timespec real_time_end;
+  struct rusage usage_times;
+  char **command;
+  int pid;
+} profile_times;
 
 /* Create a command stream from GETBYTE and ARG.  A reader of
    the command stream will invoke GETBYTE (ARG) to get the next byte.
@@ -65,6 +78,8 @@ void execute_while(command_t, int, int);
 void execute_until(command_t, int, int);
 
 void execute_simple(command_t, int, int);
+
+void write_log(const profile_times*);
 
 
 #endif // _COMMAND_H_
