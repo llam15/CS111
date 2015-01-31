@@ -34,18 +34,18 @@
 #include <stdbool.h>
 #include <math.h>
 
-static bool can_write;
+static int can_write;
 static int log_file;
 static int monotonic_res;
 static int realtime_res;
 
 #define BILLION (1000000000.0)
 #define MILLION (1000000.0)
-#define STAT_COULD_NOT_WRITE (1)
 
 int
 prepare_profiling (char const *name)
 {
+  can_write = 1;
   return open(name, O_WRONLY | O_CREAT | O_TRUNC,
 	      S_IRUSR | S_IWUSR | S_IXUSR);
 }
@@ -58,46 +58,48 @@ write_log(const profile_times *times)
 
   char buf[1024];
   int num_chars = -1;
-  
-  double completion_time = (double) times->finish_time.tv_sec + (times->finish_time.tv_nsec/BILLION);
-  double real_sec = times->real_time_end.tv_sec - times->real_time_start.tv_sec;
-  long real_nsec = times->real_time_end.tv_nsec - times->real_time_start.tv_nsec;
-  double real_time = real_sec + (real_nsec/BILLION);
-  double user_time = (double) times->usage_times.ru_utime.tv_sec +
-    (times->usage_times.ru_utime.tv_usec/MILLION);
-  double sys_time = (double) times->usage_times.ru_stime.tv_sec + 
-    (times->usage_times.ru_stime.tv_usec/MILLION);
 
-   if (times->command == NULL) {
+  // Calculate times by adding seconds and nanoseconds together. Cast to double
+  double completion_time = times->finish_time.tv_sec + (times->finish_time.tv_nsec/BILLION);
+  double real_sec  = times->real_time_end.tv_sec  - times->real_time_start.tv_sec;
+  long real_nsec   = times->real_time_end.tv_nsec - times->real_time_start.tv_nsec;
+  double real_time = real_sec + (real_nsec/BILLION);
+  double user_time = times->usage_times.ru_utime.tv_sec + (times->usage_times.ru_utime.tv_usec/MILLION);
+  double sys_time  = times->usage_times.ru_stime.tv_sec + (times->usage_times.ru_stime.tv_usec/MILLION);
+
+  // If has command name, print times with command
+  if (times->command == NULL) {
      num_chars = snprintf(buf, 1023, "%.*f %.*f %0.6f %0.6f [%d]", realtime_res, completion_time, monotonic_res, real_time, 
 			  user_time, sys_time, times->pid);
      if (num_chars < 0)
        error(1, 0, "Error while writing to log.\n");
-   }
+  }
 
-   else {
-     num_chars = snprintf(buf, 1023, "%.*f %.*f %0.6f %0.6f %s", realtime_res, completion_time, monotonic_res, real_time, 
-			  user_time, sys_time, times->command[0]);
+  // If no command name, print process number
+  else {
+    num_chars = snprintf(buf, 1023, "%.*f %.*f %0.6f %0.6f %s", realtime_res, completion_time, monotonic_res, real_time, 
+			 user_time, sys_time, times->command[0]);
+    if (num_chars < 0)
+      error(1,0, "Error while writing to log.\n");
 
-     if (num_chars < 0)
-       error(1,0, "Error while writing to log.\n");
+    // Print all arguments
+    int i = 1;
+    while (times->command[i] != NULL) {
+      int added;
+      if (1023-num_chars > 0)
+	added = snprintf(buf + num_chars, 1023-num_chars, " %s", times->command[i]);
 
-     int i = 1;
-     while (times->command[i] != NULL) {
-       int added;
-       if (1023-num_chars > 0)
-	 added = snprintf(buf + num_chars, 1023-num_chars, " %s", times->command[i]);
+      if (added < 0)
+	error(1,0, "Error while writing to log.\n");
+      else
+	num_chars += added;
+      i++;
+    }
+    if (num_chars < 0)
+      error(1,0, "Error while writing to log.\n");      
+  }
 
-       if (added < 0)
-	 error(1,0, "Error while writing to log.\n");
-       else
-	 num_chars += added;
-       i++;
-     }
-     if (num_chars < 0)
-       error(1,0, "Error while writing to log.\n");      
-   }
-
+  // Lock file to prevent interweaving
   struct flock lock;
   lock.l_type = F_WRLCK;
   lock.l_whence = SEEK_SET;
@@ -107,16 +109,24 @@ write_log(const profile_times *times)
 
   fcntl(log_file, F_SETLKW, &lock);
 
+  // Print profile times
   int num_bytes =  num_chars > 1023 ? 1023 : num_chars;
   int written = write(log_file, buf, num_bytes);
   write(log_file, "\n", 1);
 
+  // If cannot write to file, stop trying to write
   if (written != num_bytes)
-    can_write = false;
+    can_write = 0;
 
+  // Unlock file
   lock.l_type = F_UNLCK;
   fcntl(log_file, F_SETLK, &lock);
+}
 
+int
+get_write_status(void)
+{
+  return can_write;
 }
 
 int
@@ -128,22 +138,21 @@ command_status (command_t c)
 void
 execute_command (command_t c, int profiling)
 {
+  // Get system resolution
   struct timespec monotonic;
   struct timespec realtime;
   clock_getres(CLOCK_MONOTONIC, &monotonic);
   clock_getres(CLOCK_REALTIME, &realtime);
 
+  // Calculate resolution decimal precision 
   monotonic_res = (int) (9 - log10(monotonic.tv_nsec));
   realtime_res = (int) (9 - log10(realtime.tv_nsec));
 
-  can_write = true;
-  
+  // Set file descriptor
   log_file = profiling;
 
+  // Execute commands
   recursive_execute(c, -1, -1);
-
-  if (!can_write)
-    exit(STAT_COULD_NOT_WRITE);
 }
 
 void
@@ -421,7 +430,8 @@ void execute_simple(command_t c, int input, int output)
   pt.command = c->u.word;
 
   clock_gettime(CLOCK_MONOTONIC, &pt.real_time_start);
-  
+
+  //If command is `:', ignore command
   if (!strcmp(c->u.word[0], ":")) { 
     clock_gettime(CLOCK_MONOTONIC, &pt.real_time_end);
     clock_gettime(CLOCK_REALTIME, &pt.finish_time);
@@ -431,6 +441,22 @@ void execute_simple(command_t c, int input, int output)
     return;
   }
 
+  // If the comand is an exec command, replace shell without forking
+  if (!strcmp(c->u.word[0], "exec")) {
+    // Redirect input if needed
+    if (input != -1)
+      dup2(input, STDIN_FILENO);
+
+    // Redirect output if needed
+    if (output != -1)
+      dup2(output, STDOUT_FILENO);
+
+    // Execute command
+    execvp(c->u.word[1], c->u.word+1);
+    fprintf(stderr, "%s: Command not found\n", c->u.word[1]);
+    _exit(127);
+  }
+  
   // Fork
   int status;
   pid_t pid = fork();
