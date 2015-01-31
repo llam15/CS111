@@ -24,10 +24,9 @@ cd "$tmp" || exit
 status=
 
 # Sanity check, to make sure it works with at least one good example.
-echo x >test0.sh || exit
-../profsh -t test0.sh >test0.out 2>test0.err || exit
-echo '# 1
-  x' >test0.exp || exit
+echo echo x >test0.sh || exit
+../profsh -p test_profile0.txt test0.sh >test0.out 2>test0.err || exit
+echo 'x' >test0.exp || exit
 diff -u test0.exp test0.out || exit
 test ! -s test0.err || {
   cat test0.err
@@ -36,52 +35,24 @@ test ! -s test0.err || {
 
 n=1
 for bad in \
-  '`' \
-  '>' \
-  '<' \
-  'a >b <' \
-  ';' \
-  '; a' \
-  'a ||' \
-  'while a' \
-  'do' \
-  'done >it' \
-  'if a; then b; else fi' \
-  'if ; then ; else ; fi' \
-  'if a; else b; then c; fi' \
-  'if a; then b' \
-  'if a; then b; else c; ); fi' \
-  'if a; then b; ) else c; fi' \
-  'if a); then b; else c; fi' \
-  'if (); then b; else c; fi' \
-  'if a; then b; else c; fi fi' \
-  'if a; then b; else c; done' \
-  'while a; do b; done ouch' \
-  'until a; do b; done >' \
-  'a
-     | b' \
-  'a
-     ; b' \
-  'a;;b' \
-  'a|||b' \
-  '|a' \
-  '< a' \
-  '&& a' \
-  '||a' \
-  '(a|b' \
-  'a;b)' \
-  '( (a)' \
-  'a>>>b'
+  'sleep 1'
 do
-  echo "$bad" >test$n.sh || exit
-  ../profsh -t test$n.sh >test$n.out 2>test$n.err && {
-    echo >&2 "test$n: unexpectedly succeeded for: $bad"
-    status=1
-  }
-  test -s test$n.err || {
-    echo >&2 "test$n: no error message for: $bad"
-    status=1
-  }
+#  echo "$bad" >test$n.sh || exit
+#  ../profsh -p test_profile$n.txt test$n.sh >test$n.out 2>test$n.err && {
+#    echo >&2 "test$n: unexpectedly succeeded for: $bad"
+#    status=1
+#  }
+#  test -s test$n.err || {
+#    echo >&2 "test$n: no error message for: $bad"
+#    status=1
+#  }
+  ../profsh -p test_profile$n.txt test$n.sh >test$n.out 2>test$n.err && echo >&2 "test$n: Unexepctedly failed."
+  hellag=$(cat test_profile$n.txt | grep 'sleep 1' | sed -n 's/^[0-9.]* \([0-9.]*\).*/\1/p')
+  maxval=$(echo 1.100000000)
+  minval=$(echo 0.900000000)
+
+  (test $maxval -gt $hellag) && (test $minval -lt $hellag) || exit
+  
   n=$((n+1))
 done
 

@@ -9,10 +9,9 @@ cd "$tmp" || exit
 status=
 
 # Sanity check, to make sure it works with at least one good example.
-echo x >test0.sh || exit
-../profsh -t test0.sh >test0.out 2>test0.err || exit
-echo '# 1
-  x' >test0.exp || exit
+echo echo x >test0.sh || exit
+../profsh test0.sh >test0.out 2>test0.err || exit
+echo 'x' >test0.exp || exit
 diff -u test0.exp test0.out || exit
 test ! -s test0.err || {
   cat test0.err
@@ -21,6 +20,7 @@ test ! -s test0.err || {
 
 n=1
 for bad in \
+  ':badcommand' \
   'if true; then echo missing fi;' \
   '((echo missing paren)' \
   'echo bad sequence;; echo bad!' \
@@ -29,7 +29,7 @@ for bad in \
   'echo hello>>>b'
 do
   echo "$bad" >test$n.sh || exit
-  ../profsh -t test$n.sh >test$n.out 2>test$n.err && {
+  ../profsh test$n.sh >test$n.out 2>test$n.err && {
     echo >&2 "test$n: unexpectedly succeeded for: $bad"
     status=1
   }

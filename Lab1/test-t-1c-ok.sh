@@ -24,99 +24,32 @@ mkdir "$tmp" || exit
 cd "$tmp" || exit
 
 cat >test.sh <<'EOF'
+cat /usr/share/dict/words | sort -u >/dev/null
+echo hello
+echo 1
+echo 2
+echo 3
+(sleep 1)
+if echo hello; then echo world; fi;
+(exec echo hello)
 
 EOF
 
 cat >test.exp <<'EOF'
-# 1
-  true
-# 2
-  g++ -c foo.c
-# 3
-  : : :
-# 4
-  if
-      cat</etc/passwd \
-    |
-      tr a-z A-Z \
-    |
-      sort -u
-  then
-    :
-  else
-    echo sort failed!
-  fi
-# 5
-  a b<c>d
-# 6
-  if
-      cat</etc/passwd \
-    |
-      tr a-z A-Z \
-    |
-      sort -u>out
-  then
-    :
-  else
-    echo sort failed!
-  fi
-# 7
-  if
-    if
-        a \
-      ;
-        a \
-      ;
-        a
-    then
-      b
-    else
-      :
-    fi
-  then
-    if
-      c
-    then
-      if
-          d \
-        |
-          e
-      then
-        f
-      fi
-    fi
-  fi
-# 8
-  g<h
-# 9
-  while
-    while
-        until
-          :
-        do
-          echo yoo hoo!
-        done \
-      ;
-        false
-    do
-      (
-         a \
-       |
-         b
-      )
-    done>f
-  do
-    :>g
-  done
-# 10
-    a<b>c \
-  |
-    d<e>f \
-  |
-    g<h>i
+hello
+1
+2
+3
+hello
+world
+hello
 EOF
 
-../profsh -t test.sh >test.out 2>test.err || exit
+../profsh -p test_profile.txt test.sh >test.out 2>test.err || exit
+
+cat test_profile.txt | grep -e "^\([0-9]\{1,\}\.[0-9]\{9\} \)\{2\}\([0-9]\{1,\}\.[0-9]\{6\} \)\{2\}" > test_profile_filt.txt
+
+diff -u test_profile.txt test_profile_filt.txt || exit
 
 diff -u test.exp test.out || exit
 test ! -s test.err || {
