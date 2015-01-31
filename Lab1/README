@@ -16,3 +16,27 @@ Lab 1b:
 
   Extra Features:
     - test cases in test-t-1b-ok.sh and test-t-1b-bad.sh
+
+Lab 1c:
+  Known Limitations:
+    - N/A
+
+  Spec Interpretations:
+    - Included parsing time in the top level shell profile entry.
+      This is useful because it gives you extra information about
+      the syntax parsing. This will help you compensate for parsing
+      time in the final evaluation of the runtime of the script.
+      Also, if the syntax parsing is buggy, this will show up in the
+      profiling of the shell.
+
+  Questions:
+  1. No. For example, if the REALTIME_CLOCK is changed during execution
+     then the first column will not necessarily be in nondecrasing order.
+  2. Yes. If you have multiple threads, then the sum of the user and
+     system times may be less than the real time. For example, if there
+     were four threads running for one second, then the real time would be
+     one second, but the sum of the user and system time would be four
+     seconds.
+  3. Yes. If the runtime is long enough that it causes the signed value to
+     overflow, then it can be negative.
+  4. We tested it with our scripts test-t-1c-inter.sh
