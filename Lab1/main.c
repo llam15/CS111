@@ -21,9 +21,23 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include "command.h"
+#include <unistd.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 static char const *program_name;
 static char const *script_name;
+
+static void
+add_timeval(struct timeval *a, const struct timeval *b)
+{
+  a->tv_sec += b->tv_sec;
+  a->tv_usec += b->tv_usec;
+  if (a->tv_usec > 1000000l) {
+    a->tv_usec -= 1000000l;
+    a->tv_sec++;
+  }
+}
 
 static void
 usage (void)
@@ -40,10 +54,20 @@ get_next_byte (void *stream)
 int
 main (int argc, char **argv)
 {
-    int command_number = 1;
-    bool print_tree = false;
-    char const *profile_name = 0;
-    program_name = argv[0];
+  profile_times pt;
+  
+  // Start timing shell
+  clock_gettime(CLOCK_MONOTONIC, &pt.real_time_start);  
+
+  pt.command = NULL;
+  pt.pid = getpid();
+
+  struct rusage children;
+
+  int command_number = 1;
+  bool print_tree = false;
+  char const *profile_name = 0;
+  program_name = argv[0];
 
     for (;;)
         switch (getopt (argc, argv, "p:t"))
@@ -83,6 +107,7 @@ options_exhausted:
 
     command_t last_command = NULL;
     command_t command;
+
     while ((command = read_command_stream (command_stream)))
     {
         if (print_tree)
@@ -97,6 +122,19 @@ options_exhausted:
         }
     }
 
+    clock_gettime(CLOCK_MONOTONIC, &pt.real_time_end);
+    clock_gettime(CLOCK_REALTIME, &pt.finish_time);
+    getrusage(RUSAGE_SELF, &pt.usage_times);
+    getrusage(RUSAGE_CHILDREN, &children);
+
+    add_timeval(&pt.usage_times.ru_utime, &children.ru_utime);
+    add_timeval(&pt.usage_times.ru_stime, &children.ru_stime);
+
+    write_log(&pt);
+    
+    if (profile_name && !get_write_status())
+      return 1;
+    
     return print_tree || !last_command ? 0 : command_status (last_command);
 }
 
