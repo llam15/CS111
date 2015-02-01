@@ -202,7 +202,7 @@ void lexer_putchar(char c)
       line_num++;
       lexer_putchar_i('\0');
       simple_command = false;
-      if (strchr("\n(|\0", last_c) || is_reserved(lexertokens.tokens[lexertokens.num_tokens-1]) || last_special == ';')
+      if (strchr("\n(|\0", last_c) || is_reserved(lexertokens.tokens[lexertokens.num_tokens-1]) || (last_special == ';' && is_command != 0))
 	break;
 
       if (is_command > 0 && !is_reserved(lexertokens.tokens[lexertokens.num_tokens-1])) {
