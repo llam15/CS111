@@ -15,12 +15,15 @@ Lab 1b:
     - N/A
 
   Extra Features:
-    - test cases in test-t-1b-ok.sh and test-t-1b-bad.sh
+    - Test cases in test-t-1b-ok.sh and test-t-1b-bad.sh
 
 Lab 1c:
   Known Limitations:
     - N/A
 
+  Extra Features:
+    - Test scripts in test-t-1c-ok.sh and test-t-1c-bad.sh
+    
   Spec Interpretations:
     - Included parsing time in the top level shell profile entry.
       This is useful because it gives you extra information about
@@ -28,6 +31,11 @@ Lab 1c:
       time in the final evaluation of the runtime of the script.
       Also, if the syntax parsing is buggy, this will show up in the
       profiling of the shell.
+
+  Choice of clock:
+   - For logging realtime, I chose to use the MONOTONIC_CLOCK. This is
+     because the MONOTONIC_CLOCK cannot be set, so it can be used as
+     a reliable timer.
 
   Questions:
   1. No. For example, if the REALTIME_CLOCK is changed during execution
