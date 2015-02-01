@@ -37,7 +37,7 @@ n=1
 for bad in \
   'sleep 1'
 do
-#  echo "$bad" >test$n.sh || exit
+  echo "$bad" >test$n.sh || exit
 #  ../profsh -p test_profile$n.txt test$n.sh >test$n.out 2>test$n.err && {
 #    echo >&2 "test$n: unexpectedly succeeded for: $bad"
 #    status=1
@@ -46,13 +46,20 @@ do
 #    echo >&2 "test$n: no error message for: $bad"
 #    status=1
 #  }
-  ../profsh -p test_profile$n.txt test$n.sh >test$n.out 2>test$n.err && echo >&2 "test$n: Unexepctedly failed."
+  ../profsh -p test_profile$n.txt test$n.sh >test$n.out 2>test$n.err || echo >&2 "test$n: Unexepctedly failed."
   hellag=$(cat test_profile$n.txt | grep 'sleep 1' | sed -n 's/^[0-9.]* \([0-9.]*\).*/\1/p')
   maxval=$(echo 1.100000000)
   minval=$(echo 0.900000000)
 
-  (test $maxval -gt $hellag) && (test $minval -lt $hellag) || exit
+  if [ $(echo "$maxval < $hellag" | bc) -eq 1 ] || [ $(echo "$minval > $hellag" | bc) -eq 1 ]
+  then
+      echo >&2 "test$n: Unexpected real time: $hellag"
+      status=1
+  fi
   
+  
+# ((test $maxval -gt $hellag) && (test $minval -lt $hellag)) || exit
+
   n=$((n+1))
 done
 

@@ -39,4 +39,6 @@ Lab 1c:
      seconds.
   3. Yes. If the runtime is long enough that it causes the signed value to
      overflow, then it can be negative.
-  4. We tested it with our scripts test-t-1c-inter.sh
+  4. We tested it with our scripts test-t-1c-ok.sh and test-t-1c-bad.sh.
+     test-t-1c-ok.sh checks for interleaving. test-t-1c-bad.sh checks that
+     the profile times printed are within an expected range.
