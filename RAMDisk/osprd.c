@@ -37,7 +37,7 @@
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("CS 111 RAM Disk");
 // EXERCISE: Pass your names into the kernel as the module's authors.
-MODULE_AUTHOR("Leslie Lam");
+MODULE_AUTHOR("Leslie Lam, Kevin Balke");
 
 #define OSPRD_MAJOR	222
 
@@ -182,6 +182,42 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
 		// as appropriate.
 
 		// Your code here.
+    osp_spin_lock(&d->mutex);
+    if ((filp->f_flags & F_OSPRD_LOCKED) == 0) {
+      osp_spin_unlock(&d->mutex);
+      return 0;
+    }
+    
+    if (filp_writable) {
+      d->writer = -1;
+      wake_up_all(&d->blockq);
+    }
+    else {
+      if (d->num_readers = 0) {
+	osp_spin_unlock(&d->mutex);
+	return 0;
+      }
+      d->num_readers--;
+      reader_info_t *prev = NULL;
+      reader_info_t *curr = d->readers;
+      while (curr != NULL) {
+	if (current->pid == curr->pid) {
+	  if (prev == NULL) {
+	    d->readers = d->readers->next;
+	    kfree(curr);
+	  }
+	  else {
+	    prev->next = curr->next;
+	    kfree(curr);
+	  }
+	  prev = curr;
+	  curr = curr->next;
+	}
+      }
+      wake_up_all(&d->blockq);
+    }
+    filp->f_flags |= !F_OSPRD_LOCKED;
+    osp_spin_unlock(&d->mutex);
 
 		// This line avoids compiler warnings; you may remove it.
 		(void) filp_writable, (void) d;
@@ -310,7 +346,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
       }
 
       // Get write lock
-      osp_spin_lock(&d->mutex);
+      //      osp_spin_lock(&d->mutex);
       d->writer = current->pid;
       filp->f_flags |= F_OSPRD_LOCKED;
       d->ticket_tail++;
@@ -331,7 +367,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 	if (wait == -ERESTARTSYS)
 	  return wait;
       }
-      osp_spin_lock(&d->mutex);
+      //      osp_spin_lock(&d->mutex);
 
       // Dynamically allocate new reader, add to head of list.
       reader_info_t *new_reader = kmalloc(sizeof(reader_info_t), GFP_ATOMIC);
@@ -403,17 +439,17 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 	if (!can_read(d) || ticket != d->ticket_tail)
 	  return -EBUSY;
 
-      // Dynamically allocate new reader, add to head of list.
-      reader_info_t *new_reader = kmalloc(sizeof(reader_info_t), GFP_ATOMIC);
-      new_reader->pid = current->pid;
-      new_reader->next = d->readers;
-      d->readers = new_reader;
+	// Dynamically allocate new reader, add to head of list.
+	reader_info_t *new_reader = kmalloc(sizeof(reader_info_t), GFP_ATOMIC);
+	new_reader->pid = current->pid;
+	new_reader->next = d->readers;
+	d->readers = new_reader;
 
-      // Increment number of readers and lock file
-      d->num_readers++;
-      filp->f_flags |= F_OSPRD_LOCKED;
-      d->ticket_tail++;
-      osp_spin_unlock(&d->mutex);
+	// Increment number of readers and lock file
+	d->num_readers++;
+	filp->f_flags |= F_OSPRD_LOCKED;
+	d->ticket_tail++;
+	osp_spin_unlock(&d->mutex);
     }
 
   } 
@@ -427,9 +463,44 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
     // you need, and return 0.
 
     // Your code here (instead of the next line).
-    r = -ENOTTY;
-
-  } 
+    //r = -ENOTTY;
+    osp_spin_lock(&d->mutex);
+    if ((filp->f_flags & F_OSPRD_LOCKED) == 0) {
+      osp_spin_unlock(&d->mutex);
+      return -EINVAL;
+    }
+    
+    if (filp_writable) {
+      d->writer = -1;
+      wake_up_all(&d->blockq);
+    }
+    else {
+      if (d->num_readers == 0) {
+	osp_spin_unlock(&d->mutex);
+	return -EINVAL;
+      }
+      d->num_readers--;
+      reader_info_t *prev = NULL;
+      reader_info_t *curr = d->readers;
+      while (curr != NULL) {
+	if (current->pid == curr->pid) {
+	  if (prev == NULL) {
+	    d->readers = d->readers->next;
+	    kfree(curr);
+	  }
+	  else {
+	    prev->next = curr->next;
+	    kfree(curr);
+	  }
+	  prev = curr;
+	  curr = curr->next;
+	}
+      }
+      wake_up_all(&d->blockq);
+    }
+    filp->f_flags |= !F_OSPRD_LOCKED;
+    osp_spin_unlock(&d->mutex);
+  }
   else
     r = -ENOTTY; /* unknown command */
   
