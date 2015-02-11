@@ -138,14 +138,14 @@ static void osprd_process_request(osprd_info_t *d, struct request *req)
 
 	if (rq_data_dir(req) == READ) {
 	  // Read data from memory into request buffer to return to user
-	  for (i = req->sector; i < req->sector + req->current_nr_sectors; i++)
-	    memcpy(req->buffer, d->data + i*SECTOR_SIZE, SECTOR_SIZE);
+	  for (i = 0; i < req->current_nr_sectors; i++)
+	    memcpy(req->buffer + i*SECTOR_SIZE, d->data + (req->sector + i)*SECTOR_SIZE, SECTOR_SIZE);
 	}
 
 	else if (rq_data_dir(req) == WRITE) {	  
 	  // Write data from request buffer to memory
-	  for (i = req->sector; i < req->sector + req->current_nr_sectors; i++)
-	    memcpy(d->data + i*SECTOR_SIZE, req->buffer, SECTOR_SIZE);
+	  for (i = 0; i < req->current_nr_sectors; i++)
+	    memcpy(d->data + (req->sector + i)*SECTOR_SIZE, req->buffer + i*SECTOR_SIZE, SECTOR_SIZE);
 	}
 
 	else {
