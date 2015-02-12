@@ -173,15 +173,15 @@ static int osprd_open(struct inode *inode, struct file *filp)
 // last copy is closed.)
 static int osprd_close_last(struct inode *inode, struct file *filp)
 {
-	if (filp) {
-		osprd_info_t *d = file2osprd(filp);
-		int filp_writable = filp->f_mode & FMODE_WRITE;
+  if (filp) {
+    osprd_info_t *d = file2osprd(filp);
+    int filp_writable = filp->f_mode & FMODE_WRITE;
 
-		// EXERCISE: If the user closes a ramdisk file that holds
-		// a lock, release the lock.  Also wake up blocked processes
-		// as appropriate.
+    // EXERCISE: If the user closes a ramdisk file that holds
+    // a lock, release the lock.  Also wake up blocked processes
+    // as appropriate.
 
-		// Your code here.
+    // Your code here.
     osp_spin_lock(&d->mutex);
     if ((filp->f_flags & F_OSPRD_LOCKED) == 0) {
       osp_spin_unlock(&d->mutex);
@@ -190,7 +190,6 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
     
     if (filp_writable) {
       d->writer = -1;
-      wake_up_all(&d->blockq);
     }
     else {
       if (d->num_readers = 0) {
@@ -215,17 +214,17 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
 	curr = curr->next;
 
       }
-      wake_up_all(&d->blockq);
     }
     filp->f_flags &= ~F_OSPRD_LOCKED;
+    wake_up_all(&d->blockq);
     osp_spin_unlock(&d->mutex);
 
-		// This line avoids compiler warnings; you may remove it.
-		(void) filp_writable, (void) d;
+    // This line avoids compiler warnings; you may remove it.
+    //    (void) filp_writable, (void) d;
 
-	}
+  }
 
-	return 0;
+  return 0;
 }
 
 static int can_write(osprd_info_t *d) {
@@ -260,7 +259,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
   int filp_writable = (filp->f_mode & FMODE_WRITE) != 0;
 
   // This line avoids compiler warnings; you may remove it.
-  (void) filp_writable, (void) d;
+  // (void) filp_writable, (void) d;
 
   // Set 'r' to the ioctl's return value: 0 on success, negative on error
 
@@ -499,9 +498,8 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
     
     if (filp_writable) {
       d->writer = -1;
-      filp->f_flags &= ~F_OSPRD_LOCKED;
-      wake_up_all(&d->blockq);
     }
+
     else {
       if (d->num_readers == 0) {
 	osp_spin_unlock(&d->mutex);
@@ -524,10 +522,9 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 	prev = curr;
 	curr = curr->next;
       }
-      filp->f_flags &= ~F_OSPRD_LOCKED;
-      wake_up_all(&d->blockq);
     }
-
+    filp->f_flags &= ~F_OSPRD_LOCKED;
+    wake_up_all(&d->blockq);
     osp_spin_unlock(&d->mutex);
   }
   else
