@@ -21,6 +21,57 @@ Email: leslielam@ucla.edu
 
 # Add any other information you'd like us to have below this line.
 
+In the test script given, tests 16 and 17 are CPU utilization dependent. The test scripts
+kill the second process too quickly if the CPU usage is high. If the CPU is too slow in 
+reading, then the script will kill the process before it has finished reading, and it will 
+output nothing. As a result, tests 16 and 17 will fail on slower machines, while they will 
+pass on quicker machines. We determined that this was the problem rather than our code by 
+lengthening the sleep time before it kills the last process, giving the CPU enough time 
+to read and output the correct output before the process was killed. With the lengthened 
+sleep time, the test cases passed 100% of the time. The modified test cases are as shown:
+
+   # 16
+    [ # Run in a separate subshell with job control enabled.
+      '(set -m; ' .
+      # (1) At 0s, grab write lock; after 0.5s, write 'aaa' and exit
+      '(echo aaa | ./osprdaccess -w 3 -l -d 0.5) & ' .
+      # (2) At 0.1s, wait for read lock; print first character then X
+      '(sleep 0.1 && ./osprdaccess -r 1 -l | sed s/$/X/ && sleep 1) & ' .
+      'bgshell1=$! ; ' .
+      # (3) At 0.2s, wait for read lock; print first character then Y
+      '(sleep 0.2 && ./osprdaccess -r 1 -l | sed s/$/Y/ && sleep 1) & ' .
+      'bgshell2=$! ; ' .
+      # (4) At 0.3s, kill processes in (2); this may introduce a "bubble"
+      #     in the wait queue that would prevent (3) from running
+      'sleep 0.3 ; kill -9 -$bgshell1 ; ' .
+      # (5) At 1.3s, kill processes in (3)
+      'sleep 1 ; kill -9 -$bgshell2 ' .
+      # Clean up separate shell.
+      ') 2>/dev/null',
+      "aY"
+    ],
+
+    # 17
+    [ # Run in a separate subshell with job control enabled.
+      '(set -m; ' .
+      # (1) At 0s, grab write lock; after 0.5s, write 'aaa' and exit
+      '(echo aaa | ./osprdaccess -w 3 -l -d 0.5) & ' .
+      # (2) At 0.1s, wait for read lock; print first character then X
+      '(sleep 0.1 && ./osprdaccess -r 1 -l | sed s/$/X/ && sleep 1) & ' .
+      'bgshell1=$! ; ' .
+      # (3) At 0.2s, wait for read lock; print first character then Y
+      '(sleep 0.2 && ./osprdaccess -r 1 -l | sed s/$/Y/ && sleep 1) & ' .
+      'bgshell2=$! ; ' .
+      # (4) At 0.3s, kill processes in (3); this may introduce a "bubble"
+      #     in the wait queue that would prevent (2) from running
+      'sleep 0.3 ; kill -9 -$bgshell2 ; ' .
+      # (5) At 1.3s, kill processes in (2)
+      'sleep 1 ; kill -9 -$bgshell1 ' .
+      # Clean up separate shell.
+      ') 2>/dev/null',
+      "aX"
+    ],
+
 Using debug messages, we determined that our code services tickets in correct order, 100%
 of the time. However, the console output is not necessarily in order. For example, we wrote 
 our own test case similar to that of tests 16 and 17 in the given test script, but 
