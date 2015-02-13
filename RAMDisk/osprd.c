@@ -139,17 +139,21 @@ static void osprd_process_request(osprd_info_t *d, struct request *req)
 
 	// Your code here.
 	// eprintk("Should process request...\n");
-
+	       
 	if (rq_data_dir(req) == READ) {
 	  // Read data from memory into request buffer to return to user
-	  for (i = 0; i < req->current_nr_sectors; i++)
+	  /*for (i = 0; i < req->current_nr_sectors; i++)
 	    memcpy(req->buffer + i*SECTOR_SIZE, d->data + (req->sector + i)*SECTOR_SIZE, SECTOR_SIZE);
+	  */
+	  memcpy(req->buffer, d->data + req->sector, req->current_nr_sectors*SECTOR_SIZE);
 	}
 
 	else if (rq_data_dir(req) == WRITE) {	  
 	  // Write data from request buffer to memory
-	  for (i = 0; i < req->current_nr_sectors; i++)
+	  /* for (i = 0; i < req->current_nr_sectors; i++)
 	    memcpy(d->data + (req->sector + i)*SECTOR_SIZE, req->buffer + i*SECTOR_SIZE, SECTOR_SIZE);
+	  */
+	  memcpy(d->data + req->sector, req->buffer, req->current_nr_sectors*SECTOR_SIZE);
 	}
 
 	else {
@@ -265,7 +269,6 @@ static void terminate_ticket(osprd_info_t *d, int ticket) {
     d->ticket_head--;
   */
 
-      eprintk("Adding %d\n", ticket);
   terminated_ticket_t *new = kmalloc(sizeof(terminated_ticket_t), GFP_ATOMIC);
   new->t_num = ticket;
   new->next = NULL;
@@ -490,7 +493,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
       }
       //      osp_spin_lock(&d->mutex);
 
-       eprintk("Ticket %d has the read lock\n",ticket);
+      // eprintk("Ticket %d has the read lock\n",ticket);
       // Dynamically allocate new reader, add to head of list.
       reader_info_t *new_reader = kmalloc(sizeof(reader_info_t), GFP_ATOMIC);
       new_reader->pid = current->pid;
