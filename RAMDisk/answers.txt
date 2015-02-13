@@ -20,3 +20,49 @@ Email: leslielam@ucla.edu
 
 
 # Add any other information you'd like us to have below this line.
+
+Using debug messages, we determined that our code services tickets in correct order, 100%
+of the time. However, the console output is not necessarily in order. For example, we wrote 
+our own test case similar to that of tests 16 and 17 in the given test script, but 
+with five readers, rather than 2 readers. Two out of five of these readers would then be 
+killed, and the output should simply be the remaining 3 processes in order. However, the output 
+suffers from race conditions that do not seem to stem from our code. Sometimes the test case 
+would succeed, other times it prints out of order (e.g. aUaYaW).
+
+We suspect that the race condition is a result of the process releasing its spin lock after 
+the osprd_ioctl call returns, but before calling transfer, allowing the scheduler to interrupt 
+and place another process's transfer operation before that of the current process. This would 
+produce out of order output regardless of the order in which tickets are processed.
+
+The perl script is as shown below:
+
+    # 18
+    [ # Run in a separate subshell with job control enabled.
+      '(set -m; ' .
+      # (1) At 0s, grab write lock; after 0.5s, write 'aaa' and exit
+      '(echo aaa | ./osprdaccess -w 3 -l -d 0.5) & ' .
+      # (2) At 0.1s, wait for read lock; print first character then X
+      '(sleep 0.1 && ./osprdaccess -r 1 -l | sed s/$/X/ && sleep 2) & ' .
+      'bgshell1=$! ; ' .
+      # (3) At 0.2s, wait for read lock; print first character then Y
+      '(sleep 0.2 && ./osprdaccess -r 1 -l | sed s/$/Y/ && sleep 2) & ' .
+      'bgshell2=$! ; ' .
+      # (4) At 0.2s, wait for read lock; print first character then Z
+      '(sleep 0.3 && ./osprdaccess -r 1 -l | sed s/$/Z/ && sleep 2) & ' .
+      'bgshell3=$! ; ' .
+      # (5) At 0.2s, wait for read lock; print first character then W
+      '(sleep 0.4 && ./osprdaccess -r 1 -l | sed s/$/W/ && sleep 2) & ' .
+      'bgshell4=$! ; ' .
+      # (6) At 0.2s, wait for read lock; print first character then U
+      '(sleep 0.5 && ./osprdaccess -r 1 -l | sed s/$/U/ && sleep 2) & ' .
+      'bgshell5=$! ; ' .
+
+      # (7) At 0.4s, kill processes in (4); this may introduce a "bubble"
+      #     in the wait queue that would prevent (2-4) from running
+      'sleep 0.4 ; kill -9 -$bgshell3 -$bgshell1 ; ' .
+      # (8) At 0.4s, kill processes in (2); this is the second "bubble"
+      'sleep 0.4 ; kill -9 -$bgshell1  ' .
+      # Clean up separate shell.
+      ') 2>/dev/null',
+      "aYaWaU"
+    ],
