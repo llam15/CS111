@@ -336,6 +336,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 
   // is file open for writing?
   int filp_writable = (filp->f_mode & FMODE_WRITE) != 0;
+  int filp_readable = (filp->f_mode & FMODE_READ) != 0;
 
   // This line avoids compiler warnings; you may remove it.
   // (void) filp_writable, (void) d;
@@ -451,7 +452,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
     }
 
     // Attempt to get read lock
-    else {
+    if (filp_readable) {
       osp_spin_lock(&d->mutex);
       // Check if you already have a read lock. If so, return deadlock
       reader_info_t *r_info = d->readers;
@@ -573,7 +574,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
     }
 
     // Attempt to get read lock
-    else {
+    if (filp_readable) {    
 	osp_spin_lock(&d->mutex);
 	reader_info_t *r_info = d->readers;
 	while (r_info != NULL) {
@@ -633,7 +634,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
       d->writer = -1;
     }
 
-    else {
+    if (filp_readable) {
       if (d->num_readers == 0) {
 	osp_spin_unlock(&d->mutex);
 	return -EINVAL;
