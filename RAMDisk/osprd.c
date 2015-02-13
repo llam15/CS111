@@ -73,12 +73,11 @@ typedef struct osprd_info {
 
 	wait_queue_head_t blockq;       // Wait queue for tasks blocked on
 					// the device lock
+
   size_t num_readers; // Number of readers
   reader_info_t *readers; // List of process IDs of readers
   pid_t writer; // Process ID of writer
   terminated_ticket_t *terminated_tickets; // List of terminated tickets
-	/* HINT: You may want to add additional fields to help
-	         in detecting deadlock. */
 
 	// The following elements are used internally; you don't need
 	// to understand them.
@@ -137,26 +136,18 @@ static void osprd_process_request(osprd_info_t *d, struct request *req)
 	// Consider the 'req->sector', 'req->current_nr_sectors', and
 	// 'req->buffer' members, and the rq_data_dir() function.
 
-	// Your code here.
-	// eprintk("Should process request...\n");
-	       
 	if (rq_data_dir(req) == READ) {
 	  // Read data from memory into request buffer to return to user
-	  /*for (i = 0; i < req->current_nr_sectors; i++)
-	    memcpy(req->buffer + i*SECTOR_SIZE, d->data + (req->sector + i)*SECTOR_SIZE, SECTOR_SIZE);
-	  */
 	  memcpy(req->buffer, d->data + req->sector, req->current_nr_sectors*SECTOR_SIZE);
 	}
 
 	else if (rq_data_dir(req) == WRITE) {	  
 	  // Write data from request buffer to memory
-	  /* for (i = 0; i < req->current_nr_sectors; i++)
-	    memcpy(d->data + (req->sector + i)*SECTOR_SIZE, req->buffer + i*SECTOR_SIZE, SECTOR_SIZE);
-	  */
 	  memcpy(d->data + req->sector, req->buffer, req->current_nr_sectors*SECTOR_SIZE);
 	}
 
 	else {
+	  // Something went wrong with I/O
 	  eprintk("Error while reading/writing\n");
 	  end_request(req,0);
 	  return;
@@ -184,31 +175,30 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
   if (filp) {
     osprd_info_t *d = file2osprd(filp);
     int filp_writable = filp->f_mode & FMODE_WRITE;
+    int filp_readable = filp->f_mode & FMODE_READ;
 
     // EXERCISE: If the user closes a ramdisk file that holds
     // a lock, release the lock.  Also wake up blocked processes
     // as appropriate.
 
-    // Your code here.
+    // If the file is not locked, then do nothing and return
     osp_spin_lock(&d->mutex);
     if ((filp->f_flags & F_OSPRD_LOCKED) == 0) {
       osp_spin_unlock(&d->mutex);
       return 0;
     }
     
+    // If the file has been opened for writing, then set the writer pid to -1
     if (filp_writable) {
       d->writer = -1;
     }
-    else {
-      /*      if (d->num_readers = 0) {
-	osp_spin_unlock(&d->mutex);
-	return 0;
-	}*/
+    if (filp_readable) {
       reader_info_t *prev = NULL;
       reader_info_t *curr = d->readers;
+      
+      // Traverse the list of readers. Remove and free the reader with the matching pid
       while (curr != NULL) {
 	if (current->pid == curr->pid) {
-	  //eprintk("Number of readers was: %d, now %d\n",d->num_readers, d->num_readers-1);
 	  d->num_readers--;
 	  if (prev == NULL) {
 	    d->readers = d->readers->next;
@@ -224,15 +214,11 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
 
       }
     }
-    // eprintk("I am releasing my lock\n");
-    // eprintk("ticket tail = %d\n",d->ticket_tail);
-    // eprintk("Writer = %d, num readers = %d\n",d->writer, d->num_readers);
+
+    // Unlock the file and wake blocked processes
     filp->f_flags &= ~F_OSPRD_LOCKED;
     wake_up_all(&d->blockq);
     osp_spin_unlock(&d->mutex);
-
-    // This line avoids compiler warnings; you may remove it.
-    //    (void) filp_writable, (void) d;
 
   }
 
@@ -240,6 +226,7 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
 }
 
 static int can_write(osprd_info_t *d) {
+  // If there are no readers and no writers, return true
   if ((d->num_readers == 0) && (d->writer < 0))
     return 1;
 
@@ -247,28 +234,15 @@ static int can_write(osprd_info_t *d) {
 }
 
 static int can_read(osprd_info_t *d) {
+  // If there are no writers, return true
   if (d->writer < 0)
     return 1;
   return 0;
 }
 
-/*
-static void update_tickets(osprd_info_t *d, int ticket) {
-  if (ticket <= d->ticket_tail)
-    d->ticket_tail++;
-  else
-    d->ticket_head--;
-}
-*/
-
 static void terminate_ticket(osprd_info_t *d, int ticket) {
 
-  /*  if (ticket <= d->ticket_tail)
-    d->ticket_tail++;
-  else
-    d->ticket_head--;
-  */
-
+  // Malloc space for a new ticket
   terminated_ticket_t *new = kmalloc(sizeof(terminated_ticket_t), GFP_ATOMIC);
   new->t_num = ticket;
   new->next = NULL;
@@ -282,7 +256,7 @@ static void terminate_ticket(osprd_info_t *d, int ticket) {
     return;
   }
 
-  // Insert into list as appropriate
+  // Insert into list as appropriate (in order)
   while (curr != NULL) {
     if (curr->t_num >= new->t_num) {
       new->next = curr;
@@ -297,14 +271,16 @@ static void terminate_ticket(osprd_info_t *d, int ticket) {
     curr = curr->next;
   }
 
+  // Reached end of list. New terminated ticket appended to end of list
   prev->next = new;
-
 
 }
 
 static int can_run_ticket(osprd_info_t *d, int ticket) {
   
   terminated_ticket_t *curr = d->terminated_tickets;
+
+  // Skip terminated consecutive tickets
   while (curr != NULL && curr->t_num < ticket) {
     if (curr->t_num == d->ticket_tail)
       d->ticket_tail++;
@@ -312,6 +288,7 @@ static int can_run_ticket(osprd_info_t *d, int ticket) {
     curr = curr->next;
   }
   
+  // If current ticket is the ticket to be served, return true
   if (ticket == d->ticket_tail)
     return 1;
 
@@ -334,12 +311,9 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
   osprd_info_t *d = file2osprd(filp);	// device info
   int r = 0;			// return value: initially 0
 
-  // is file open for writing?
+  // is file open for writing? Is the file open for reading?
   int filp_writable = (filp->f_mode & FMODE_WRITE) != 0;
   int filp_readable = (filp->f_mode & FMODE_READ) != 0;
-
-  // This line avoids compiler warnings; you may remove it.
-  // (void) filp_writable, (void) d;
 
   // Set 'r' to the ioctl's return value: 0 on success, negative on error
 
@@ -380,37 +354,28 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
     // (Some of these operations are in a critical section and must
     // be protected by a spinlock; which ones?)
 
-    // Your code here (instead of the next two lines).
-    //eprintk("Attempting to acquire\n");
-    //r = -ENOTTY;	  
 
+    // Grab next ticket
     osp_spin_lock(&d->mutex);
     ticket = d->ticket_head;
     d->ticket_head++;
 
-    // Check if you already have a write lock. If so, return deadlock
+    // Check if you already have a write lock. If so, terminate and return deadlock
     if (current->pid == d->writer){
-      //d->ticket_head--;
-      //d->ticket_tail++;
-      // update_tickets(d, ticket);
       terminate_ticket(d, ticket);
       osp_spin_unlock(&d->mutex);
       return -EDEADLK;
     }
-
     osp_spin_unlock(&d->mutex);
 
     // Attempt to get write lock
     if (filp_writable) {
       osp_spin_lock(&d->mutex);
  
-      // Check if you already have a read lock. If so, return deadlock
+      // Check if you already have a read lock. If so, terminate and return deadlock
       reader_info_t *r_info = d->readers;
       while (r_info != NULL) {
 	if (current->pid == r_info->pid){
-	  // d->ticket_head--;
-	  // d->ticket_tail++;
-	  // update_tickets(d, ticket);
 	  terminate_ticket(d, ticket);
 	  osp_spin_unlock(&d->mutex);
 	  return -EDEADLK;
@@ -422,20 +387,15 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
       while (1) {
 	osp_spin_lock(&d->mutex);
 	// Check if can obtain write lock (no readers/no writers)
-	if (can_write(d) && can_run_ticket(d, ticket))//(ticket == d->ticket_tail))
+	if (can_write(d) && can_run_ticket(d, ticket))
 	  break;
 	osp_spin_unlock(&d->mutex);
 	// Block until can get write lock
-	// eprintk("I am waiting for a write lock. I will sleep now\n");
-	// eprintk("I am waiting on: %d\nThere are %d readers\n", d->writer,d->num_readers);
-	// eprintk("My ticket number is %d. Ticket Tail is %d\n", ticket, d->ticket_tail);
-	int wait = wait_event_interruptible(d->blockq, can_write(d) && can_run_ticket(d,ticket));//(ticket == d->ticket_tail));
+	int wait = wait_event_interruptible(d->blockq, can_write(d) && can_run_ticket(d,ticket));
 
-	// Return -ERESTARTSYS if interrupted by signal
+	// Return -ERESTARTSYS if interrupted by signal, and terminate ticket
 	if (wait == -ERESTARTSYS) {
 	  osp_spin_lock(&d->mutex);
-	  // d->ticket_tail++;
-	  // update_tickets(d, ticket);
 	  terminate_ticket(d, ticket);
 	  osp_spin_unlock(&d->mutex);
 	  return wait;
@@ -443,8 +403,6 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
       }
 
       // Get write lock
-      //      osp_spin_lock(&d->mutex);
-      // eprintk("%d has the write lock\n",current->pid);
       d->writer = current->pid;
       filp->f_flags |= F_OSPRD_LOCKED;
       d->ticket_tail++;
@@ -454,13 +412,10 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
     // Attempt to get read lock
     if (filp_readable) {
       osp_spin_lock(&d->mutex);
-      // Check if you already have a read lock. If so, return deadlock
+      // Check if you already have a read lock. If so, terminate ticket and return deadlock
       reader_info_t *r_info = d->readers;
       while (r_info != NULL) {
 	if (current->pid == r_info->pid){
-	  // d->ticket_head--;
-	  // d->ticket_tail++;
-	  // update_tickets(d, ticket);
 	  terminate_ticket(d, ticket);
 	  osp_spin_unlock(&d->mutex);
 	  return -EDEADLK;
@@ -473,28 +428,21 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 	osp_spin_lock(&d->mutex);
 
 	// Check if can obtain read lock (no writers)
-	if (can_read(d) && can_run_ticket(d, ticket))//(ticket == d->ticket_tail))
+	if (can_read(d) && can_run_ticket(d, ticket))
 	  break;
 	osp_spin_unlock(&d->mutex);
 	// block until can get read lock
-	// eprintk("I am waiting for a READ lock. I slep now\n");
-	// eprintk("The writer is: %d\n",d->writer);
-	// eprintk("My ticket number is %d, ticket_tail = %d\n",ticket, d->ticket_tail);
-	int wait = wait_event_interruptible(d->blockq, can_read(d) && can_run_ticket(d,ticket)); //(ticket == d->ticket_tail));
+	int wait = wait_event_interruptible(d->blockq, can_read(d) && can_run_ticket(d,ticket));
+
+	// Return -ERESTARTSYS if interrupted by signal, and terminate ticket	
 	if (wait == -ERESTARTSYS) {
 	  osp_spin_lock(&d->mutex);
-	  // eprintk("Interrupted. Ticket head: %d, ticket tail: %d, my ticket: %d\n", d->ticket_head, d->ticket_tail, ticket);
-	  // d->ticket_head--;
-	  // d->ticket_tail++;
-	  // update_tickets(d, ticket);
 	  terminate_ticket(d, ticket);
 	  osp_spin_unlock(&d->mutex);
 	  return wait;
 	}
       }
-      //      osp_spin_lock(&d->mutex);
 
-      // eprintk("Ticket %d has the read lock\n",ticket);
       // Dynamically allocate new reader, add to head of list.
       reader_info_t *new_reader = kmalloc(sizeof(reader_info_t), GFP_ATOMIC);
       new_reader->pid = current->pid;
@@ -518,20 +466,13 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
     // OSPRDIOCTRYACQUIRE should return -EBUSY.
     // Otherwise, if we can grant the lock request, return 0.
 
-    // Your code here (instead of the next two lines).
-    // eprintk("Attempting to try acquire\n");
-    // r = -ENOTTY;
-    //    eprintk("BUSY?\n");
-
+    // Grab next ticket
     osp_spin_lock(&d->mutex);
     ticket = d->ticket_head;
     d->ticket_head++;
 
-    // Check if you already have a write lock. If so, return deadlock
+    // Check if you already have a write lock. If so, terminate ticket and return -EBUSY
     if (current->pid == d->writer){
-      // d->ticket_head--;
-      // d->ticket_tail++;
-      // update_tickets(d, ticket);
       terminate_ticket(d, ticket);
       osp_spin_unlock(&d->mutex);
       return -EBUSY;
@@ -542,13 +483,10 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
     if (filp_writable) {
       osp_spin_lock(&d->mutex);
  
-      // Check if you already have a read lock. If so, return deadlock
+      // Check if you already have a read lock. If so, terminate and return -EBUSY
       reader_info_t *r_info = d->readers;
       while (r_info != NULL) {
 	if (current->pid == r_info->pid){
-	  // d->ticket_head--;
-	  // d->ticket_tail++;
-	  // update_tickets(d, ticket);
 	  terminate_ticket(d, ticket);
 	  osp_spin_unlock(&d->mutex);
 	  return -EBUSY;
@@ -556,16 +494,13 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 	r_info = r_info->next;
       }
 
-      if (!can_write(d) || !can_run_ticket(d, ticket)) { //(ticket != d->ticket_tail)){
-	// d->ticket_head--;
-	// d->ticket_tail++;
-	// update_tickets(d, ticket);
+      // If you cannot write or are not the current ticket to run, terminate and return -EBUSY
+      if (!can_write(d) || !can_run_ticket(d, ticket)) {
 	terminate_ticket(d, ticket);
 	osp_spin_unlock(&d->mutex);
 	return -EBUSY;
       }
 
-      //eprintk("writing now\n");
       // Get write lock
       d->writer = current->pid;
       filp->f_flags |= F_OSPRD_LOCKED;
@@ -576,12 +511,11 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
     // Attempt to get read lock
     if (filp_readable) {    
 	osp_spin_lock(&d->mutex);
+
+	// Check if you already have a read lock. If so, terminate and return -EBUSY
 	reader_info_t *r_info = d->readers;
 	while (r_info != NULL) {
 	  if (current->pid == r_info->pid){
-	    // d->ticket_head--;
-	    // d->ticket_tail++;
-	    // update_tickets(d, ticket);
 	    terminate_ticket(d, ticket);
 	    osp_spin_unlock(&d->mutex);
 	    return -EBUSY;
@@ -589,11 +523,8 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 	  r_info = r_info->next;
 	}
 
-	// Check if can obtain read lock (no writers)
-	if (!can_read(d) || !can_run_ticket(d, ticket)) {//(ticket != d->ticket_tail)) {
-	  // d->ticket_head--;
-	  // d->ticket_tail++;
-	  // update_tickets(d, ticket);
+	// If you cannot get the read lock or are not the current ticket being run, terminate and return -EBUSY
+	if (!can_read(d) || !can_run_ticket(d, ticket)) {
 	  terminate_ticket(d, ticket);
 	  osp_spin_unlock(&d->mutex);
 	  return -EBUSY;
@@ -622,28 +553,26 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
     // the wait queue, perform any additional accounting steps
     // you need, and return 0.
 
-    // Your code here (instead of the next line).
-    //r = -ENOTTY;
+    // If file is not locked, do nothing and return -EINVAL
     osp_spin_lock(&d->mutex);
     if ((filp->f_flags & F_OSPRD_LOCKED) == 0) {
       osp_spin_unlock(&d->mutex);
       return -EINVAL;
     }
     
+    // If had write lock, set writer pid to -1
     if (filp_writable) {
       d->writer = -1;
     }
 
+    // If had read lock, decrement number of readers
     if (filp_readable) {
-      if (d->num_readers == 0) {
-	osp_spin_unlock(&d->mutex);
-	return -EINVAL;
-      }
       reader_info_t *prev = NULL;
       reader_info_t *curr = d->readers;
+
+      // Traverse list of readers. Remove and free reader with matching pid
       while (curr != NULL) {
 	if (current->pid == curr->pid) {
-	  //eprintk("Number of readers was: %d, now %d",d->num_readers, d->num_readers-1);
 	  d->num_readers--;
 	  if (prev == NULL) {
 	    d->readers = d->readers->next;
@@ -658,7 +587,8 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 	curr = curr->next;
       }
     }
-    //eprintk("I am releasing my lock\n");
+
+    // Unlock file and wake up blocked processes
     filp->f_flags &= ~F_OSPRD_LOCKED;
     wake_up_all(&d->blockq);
     osp_spin_unlock(&d->mutex);
@@ -678,7 +608,6 @@ static void osprd_setup(osprd_info_t *d)
 	init_waitqueue_head(&d->blockq);
 	osp_spin_lock_init(&d->mutex);
 	d->ticket_head = d->ticket_tail = 0;
-	/* Add code here if you add fields to osprd_info_t. */
 	d->num_readers = 0;
 	d->readers = NULL;
 	d->writer = -1;
