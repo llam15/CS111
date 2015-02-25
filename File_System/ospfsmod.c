@@ -500,7 +500,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		case OSPFS_FTYPE_DIR:
 		  ok_so_far = filldir(dirent, od->od_name, strlen(od->od_name), f_pos, od->od_ino, DT_DIR);
 		  break;
-		case OSPFS_FYTPE_SYMLINK:
+		case OSPFS_FTYPE_SYMLINK:
 		  ok_so_far = filldir(dirent, od->od_name, strlen(od->od_name), f_pos, od->od_ino, DT_LNK);
 		  break;
 		}
@@ -680,7 +680,7 @@ indir_index(uint32_t b)
 {
   // Your code here.
 
-  // If b is inside direct block
+  // If b is inside inode
   if (b < OSPFS_NDIRECT)
     return -1;
 
@@ -707,7 +707,14 @@ static int32_t
 direct_index(uint32_t b)
 {
   // Your code here.
-  return b % OSPFS_NDIRECT;
+
+  // If b is inside inode return b
+  if (b < OSPFS_NDIRECT)
+    return b;
+
+  // If b is in indirect block
+  else 
+    return (b - OSPFS_NDIRECT) % OSPFS_NINDIRECT;
 }
 
 
@@ -749,16 +756,131 @@ add_block(ospfs_inode_t *oi)
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
 
 	// keep track of allocations to free in case of -ENOSPC
-	uint32_t *allocated[2] = { 0, 0 };
-	uint32_t direct_blocks, indirect_blocks, d_indirect_blocks;
+	// uint32_t *allocated[2] { 0, 0 }; // EXTRA *??
+	uint32_t allocated[2] = { 0, 0 };
+	uint32_t new_block = 0;
+	/* EXERCISE: Your code here */
 
+	// Error, negative number of blocks
 	if (n < 0)
 	  return -EIO;
 	 
+	// If next block can be contained in direct block
+	if (n < OSPFS_NDIRECT) {
+	  // Allocate new direct block
+	  new_block = allocate_block();
+	  
+	  // If allocation failed, return error
+	  if (new_block == 0)
+	    return -ENOSPC;
+
+	  // Zero out new block and put in direct block array
+	  memset(ospfs_block(new_block), 0, OSPFS_BLKSIZE);
+	  oi->oi_direct[n] = new_block;
+	}
+
+	// Else if next block can be contained in indirect block
+	else if (n < (OSPFS_NDIRECT + OSPFS_NINDIRECT)) {
+	  // Check if need to allocate new indirect block
+	  if (oi->oi_indirect == 0) {
+	    // Allocate new indirect block
+	    allocated[0] = allocate_block();
+	    
+	    // If allocation failed, return error
+	    if (allocated[0] == 0)
+	      return -ENOSPC;
+
+	    // Zero out new indirect block
+	    memset(ospfs_block(allocated[0]), 0, OSPFS_BLKSIZE);
+	    oi->oi_indirect = allocated[0];
+	  }
+
+	  // Allocate new direct block
+	  new_block = allocate_block();
+
+	  // If allocation failed, free new indirect block if applicable
+	  if (new_block == 0) {
+	    free_block(allocated[0]);
+	    if (allocated[0] != 0)
+	      oi->oi_indirect = 0;
+	    return -ENOSPC;
+	  }
+
+	  // Zero out new direct block
+	  memset(ospfs_block(new_block), 0, OSPFS_BLKSIZE);
+	  
+	  // Add new direct block to indirect block
+	  ((uint32_t *) ospfs_block(oi->oi_indirect))[direct_index(n)] = new_block;
+	}
 	
-	/* EXERCISE: Your code here */
-	// return -EIO; // Replace this line
-	
+	// Else if next block can be contained in indirect^2 block
+	else if (n < OSPFS_MAXFILEBLKS) {
+	  uint32_t *indirect2_block;
+
+	  if (oi->oi_indirect2 == 0) {
+	    // Allocate new indirect^2 block
+	    allocated[1] = allocate_block();
+
+	    // If allocation failed, return error
+	    if (allocated[1] == 0)
+	      return -ENOSPC;
+
+	    //Zero out new indirect^2 block
+	    memset(ospfs_block(allocated[1]), 0, OSPFS_BLKSIZE);
+	    oi->oi_indirect2 = allocated[1];
+	  }
+	  
+	  indirect2_block = (uint32_t *) ospfs_block(oi->oi_indirect2);
+	  
+	  // Check if need to allocate new indirect block
+	  if (indirect2_block[indir_index(n)] == 0) {
+	    // Allocate new indirect block;
+	    allocated[0] = allocate_block();
+	    
+	    // If allocation failed, free new indirect^2 if applicable, and return error
+	    if (allocated[0] == 0) {
+	      free_block(allocated[1]);
+	      if (allocated[1] != 0)
+		oi->oi_indirect2 = 0;
+
+	      return -ENOSPC;
+	    }
+
+	    // Zero out new indirect block and add to indirect^2 block
+	    memset(ospfs_block(allocated[0]), 0, OSPFS_BLKSIZE);
+	    indirect2_block[indir_index(n)] = allocated[0];
+	  }
+	  
+	  // Allocate new direct block
+	  new_block = allocate_block();
+	  
+	  // If allocation failed, return error and free any new indirect/indirect^2 blocks
+	  if (new_block == 0) {
+	    // Free new indirect block
+	    free_block(allocated[0]);
+	    if (allocated[0] != 0)
+	      indirect2_block[indir_index(n)] = 0;
+
+	    // Free new indirect^2 block
+	    free_block(allocated[1]);
+	    if (allocated[1] != 0)
+	      oi->oi_indirect2 = 0;
+
+	    return -ENOSPC;
+	  }
+
+	  // Zero out new direct block and put into indirect block in indirect^2 block
+	  memset(ospfs_block(new_block), 0, OSPFS_BLKSIZE);
+	  ((uint32_t *)ospfs_block(indirect2_block[indir_index(n)]))[direct_index(n)] = new_block;
+
+	}
+
+	// Cannot allocate any more blocks. Return error
+	else
+	  return -ENOSPC;
+
+	oi->oi_size += OSPFS_BLKSIZE;
+	return 0;
 }
 
 
