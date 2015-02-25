@@ -924,11 +924,11 @@ remove_block(ospfs_inode_t *oi)
 	// Last block is in inode, free block and set pointer to 0
 	if (last_block < OSPFS_NDIRECT) {
 	  // Block to free is missing. Return error
-	  if (oi->oi[last_block] == 0)
+	  if (oi->oi_direct[last_block] == 0)
 	    return -EIO;
 
-	  free_block(oi->oi[last_block]);
-	  oi->oi[last_block] = 0;
+	  free_block(oi->oi_direct[last_block]);
+	  oi->oi_direct[last_block] = 0;
 	}
 
 	// Last block is in indirect block
@@ -949,7 +949,7 @@ remove_block(ospfs_inode_t *oi)
 	  // Free empty indirect block if applicable
 	  if (index == 0) {
 	    free_block(oi->oi_indirect);
-	    oi_indirect = 0;
+	    oi->oi_indirect = 0;
 	  }
 	}
 	
@@ -977,13 +977,13 @@ remove_block(ospfs_inode_t *oi)
 
 	  // Free empty indirect block if applicable
 	  // Free empty indirect^2 block if applicable
-	  if (dir_index == O) {
+	  if (dir_index == 0) {
 	    free_block(oi->oi_indirect);
-	    oi_indirect = 0;
+	    oi->oi_indirect = 0;
 
 	    if (indirect_index == 0) {
 	      free_block(oi->oi_indirect2);
-	      oi_indirect2 = 0;
+	      oi->oi_indirect2 = 0;
 	    }
 	  }
 	}
