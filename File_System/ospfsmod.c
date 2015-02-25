@@ -766,7 +766,7 @@ add_block(ospfs_inode_t *oi)
 	  return -EIO;
 	 
 	// If next block can be contained in direct block
-	if (n < OSPFS_NDIRECT) {
+	if (indir_index(n) == -1) {
 	  // Allocate new direct block
 	  new_block = allocate_block();
 	  
@@ -780,7 +780,7 @@ add_block(ospfs_inode_t *oi)
 	}
 
 	// Else if next block can be contained in indirect block
-	else if (n < (OSPFS_NDIRECT + OSPFS_NINDIRECT)) {
+	else if (indir_index(n) == 0) {
 	  // Check if need to allocate new indirect block
 	  if (oi->oi_indirect == 0) {
 	    // Allocate new indirect block
@@ -814,7 +814,7 @@ add_block(ospfs_inode_t *oi)
 	}
 	
 	// Else if next block can be contained in indirect^2 block
-	else if (n < OSPFS_MAXFILEBLKS) {
+	else if (indir2_index(n) == 0) {
 	  uint32_t *indirect2_block;
 
 	  if (oi->oi_indirect2 == 0) {
@@ -1039,17 +1039,45 @@ change_size(ospfs_inode_t *oi, uint32_t new_size)
 	int r = 0;
 
 	while (ospfs_size2nblocks(oi->oi_size) < ospfs_size2nblocks(new_size)) {
-	        /* EXERCISE: Your code here */
-		return -EIO; // Replace this line
+	  /* EXERCISE: Your code here */
+
+	  // Grow by one block
+	  r = add_block(oi);
+
+	  // -EIO error, return
+	  if (r == -EIO) {
+	    return r;
+	  }
+	  
+	  // -ENOSPC error, shrink back to old_size
+	  else if (r == -ENOSPC) {
+	    while (ospfs_size2nblocks(oi->oi_size) > ospfs_size2nblocks(old_size)) {
+	      r = remove_block(oi);
+
+	      // Error while shrinking, return
+	      if (r < 0)
+		return r;
+	    }
+	  }
 	}
+
 	while (ospfs_size2nblocks(oi->oi_size) > ospfs_size2nblocks(new_size)) {
-	        /* EXERCISE: Your code here */
-		return -EIO; // Replace this line
+	  /* EXERCISE: Your code here */
+
+	  // Shrink by one block
+	  r = remove_block(oi);
+	  
+	  // Error while shrinking, return
+	  if (r < 0)
+	    return r;
 	}
 
 	/* EXERCISE: Make sure you update necessary file meta data
 	             and return the proper value. */
-	return -EIO; // Replace this line
+
+	oi->oi_size = new_size;
+
+	return 0;
 }
 
 
