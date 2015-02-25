@@ -910,10 +910,89 @@ static int
 remove_block(ospfs_inode_t *oi)
 {
 	// current number of blocks in file
-	uint32_t n = ospfs_size2nblocks(oi->oi_size);
+	uint32_t n = ospfs_size2nblocks(oi->oi_size);	
 
 	/* EXERCISE: Your code here */
-	return -EIO; // Replace this line
+	uint32_t last_block = n-1;
+
+	if (n < 0)
+	  return -EIO;
+
+	if (n == 0)
+	  return 0;
+
+	// Last block is in inode, free block and set pointer to 0
+	if (last_block < OSPFS_NDIRECT) {
+	  // Block to free is missing. Return error
+	  if (oi->oi[last_block] == 0)
+	    return -EIO;
+
+	  free_block(oi->oi[last_block]);
+	  oi->oi[last_block] = 0;
+	}
+
+	// Last block is in indirect block
+	else if (last_block < OSPFS_NDIRECT + OSPFS_NINDIRECT) {
+	  // Indirect block is missing. Return error
+	  if (oi->oi_indirect == 0)
+	    return -EIO;
+	  
+	  uint32_t *indirect_block = (uint32_t *) ospfs_block(oi->oi_indirect);
+	  uint32_t index = direct_index(last_block);
+	  // Block to free is missing. Return error
+	  if (indirect_block[index] == 0)
+	    return -EIO;
+
+	  free_block(indirect_block[index]);
+	  indirect_block[index] = 0;
+
+	  // Free empty indirect block if applicable
+	  if (index == 0) {
+	    free_block(oi->oi_indirect);
+	    oi_indirect = 0;
+	  }
+	}
+	
+	else if (last_block < OSPFS_MAXFILEBLKS) {
+	  // Indirect^2 block is missing, Return error
+	  if (oi->oi_indirect2 == 0)
+	    return -EIO;
+
+	  uint32_t *indirect2_block = (uint32_t *) ospfs_block(oi->oi_indirect2);
+	  uint32_t indirect_index = indir_index(last_block);
+
+	  // Indirect block is missing. Return error
+	  if (indirect2_block[indirect_index] == 0)
+	    return -EIO;
+
+	  uint32_t *indirect_block = (uint32_t *) ospfs_block(indirect2_block[indirect_index]);
+	  uint32_t dir_index = direct_index(last_block);
+
+	  // Block to free is missing. Return error
+	  if (indirect_block[dir_index] == 0)
+	    return -EIO;
+	  
+	  free_block(indirect_block[dir_index]);
+	  indirect_block[dir_index] = 0;
+
+	  // Free empty indirect block if applicable
+	  // Free empty indirect^2 block if applicable
+	  if (dir_index == O) {
+	    free_block(oi->oi_indirect);
+	    oi_indirect = 0;
+
+	    if (indirect_index == 0) {
+	      free_block(oi->oi_indirect2);
+	      oi_indirect2 = 0;
+	    }
+	  }
+	}
+
+	else
+	  return -EIO;
+
+	oi->oi_size -= OSPFS_BLKSIZE;
+	return 0;
 }
 
 
