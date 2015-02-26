@@ -1586,7 +1586,7 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	// Find empty inode. Start at 2, b/c 0 = illegal, 1 = root dir
 	ospfs_symlink_inode_t *empty_inode;
 	for (entry_ino = 2; entry_ino < ospfs_super->os_ninodes; entry_ino++) {
-	  empty_inode = (ospfs_symlink_inode_t) ospfs_inode(entry_ino);
+	  empty_inode = (ospfs_symlink_inode_t *) ospfs_inode(entry_ino);
 	  if (empty_inode->oi_nlink == 0)
 	    break;
 	}
@@ -1640,7 +1640,22 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 		(ospfs_symlink_inode_t *) ospfs_inode(dentry->d_inode->i_ino);
 	// Exercise: Your code here.
 
-	nd_set_link(nd, oi->oi_symlink);
+	// If begins with "root?", then is conditional symlink
+	if (strncmp(oi->oi_symlink, "root?", 5) == 0) {
+	  // Find boundary between links
+	  char *delimiter = strchr(oi->oi_symlink, ':');
+	  *delimiter = '\0';
+
+	  // Link to first link if root, else link to second link
+	  if (current->uid == 0)
+	    nd_set_link(nd, oi->oi_symlink + 5);
+	  else
+	    nd_set_link(nd, delimiter + 1);
+	}
+	
+	else
+	  nd_set_link(nd, oi->oi_symlink);
+
 	return (void *) 0;
 }
 
