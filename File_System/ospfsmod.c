@@ -1502,10 +1502,10 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 
 
 	// Find empty inode. Start at 2, b/c 0 = illegal, 1 = root dir
-	ospfs_inode_t *empty_inode;
+	ospfs_inode_t *empty_inode = NULL;
 	for (entry_ino = 2; entry_ino < ospfs_super->os_ninodes; entry_ino++) {
 	  empty_inode = ospfs_inode(entry_ino);
-	  if (empty_inode->oi_nlink == 0)
+	  if (empty_inode != NULL && empty_inode->oi_nlink == 0)
 	    break;
 	}
 
@@ -1577,17 +1577,17 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	// Check if file with same name already exists
 	if (find_direntry(dir_oi, dentry->d_name.name, dentry->d_name.len))
 	  return -EEXIST;
-
+	
 	// Create a new blank directory entry. Return error if cannot create
 	ospfs_direntry_t *new_entry = create_blank_direntry(dir_oi);
 	if (IS_ERR(new_entry))
 	  return PTR_ERR(new_entry);
 
 	// Find empty inode. Start at 2, b/c 0 = illegal, 1 = root dir
-	ospfs_symlink_inode_t *empty_inode;
+	ospfs_symlink_inode_t *empty_inode = NULL;
 	for (entry_ino = 2; entry_ino < ospfs_super->os_ninodes; entry_ino++) {
 	  empty_inode = (ospfs_symlink_inode_t *) ospfs_inode(entry_ino);
-	  if (empty_inode->oi_nlink == 0)
+	  if (empty_inode != NULL && empty_inode->oi_nlink == 0)
 	    break;
 	}
 
@@ -1644,13 +1644,24 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 	if (strncmp(oi->oi_symlink, "root?", 5) == 0) {
 	  // Find boundary between links
 	  char *delimiter = strchr(oi->oi_symlink, ':');
-	  *delimiter = '\0';
 
+	  // Replace colon with null byte
+	  if (delimiter != NULL)
+	    *delimiter = '\0';
+	  // If could not find colon, must have been replaced by null byte already
+	  else 
+	    delimiter = strchr(oi->oi_symlink, '\0');
+	  
+	  // Find index of begining of second link
+	  int index = delimiter - oi->oi_symlink + 1;
+	  
 	  // Link to first link if root, else link to second link
-	  if (current->uid == 0)
+	  if (current->uid == 0) {
 	    nd_set_link(nd, oi->oi_symlink + 5);
-	  else
-	    nd_set_link(nd, delimiter + 1);
+	  }
+	  else {
+	    nd_set_link(nd, oi->oi_symlink + index );
+	  }
 	}
 	
 	else
