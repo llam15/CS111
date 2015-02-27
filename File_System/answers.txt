@@ -21,6 +21,9 @@ Student ID: 104319249
 Email: kbalke@ucla.edu
 
 # Extra credit problems
-#Extra credit problem: none
+#Extra credit problem: 
+
+Will be implementing design problem #3, OSPFS Journaling. 
+(To be turned in on March 4th)
 
 # Add any other information you'd like us to know below this line.
