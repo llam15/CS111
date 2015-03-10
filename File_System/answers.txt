@@ -16,13 +16,18 @@ Student ID: 804302387
 Email: leslielam@ucla.edu
 
 # Partner 2 (if you're working in a team)
-Name: Kevin Balke
-Student ID: 104319249
-Email: kbalke@ucla.edu
+Name:
+Student ID:
+Email:
 
 # Extra credit problems
 Extra credit problem: 
-Will be implementing design problem #3, OSPFS Journaling. 
-(To be turned in on March 4th)
+
+OSPFS Crash Testing
+Added ioctl definitions/includes in ospfs.h
+Added nwrites_to_crash variable and ioctl function to ospfsmod.c
+Added crash_testing.c calls ioctl to initialize nwrites_to_crash
+Added bash test script at base/crash_tester.sh
+
 
 # Add any other information you'd like us to know below this line.

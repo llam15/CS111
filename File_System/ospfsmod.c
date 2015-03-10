@@ -31,6 +31,9 @@
  * and KERN_EMERG will make sure that you will see messages.) */
 #define eprintk(format, ...) printk(KERN_NOTICE format, ## __VA_ARGS__)
 
+// Declare nwrites_to_crash
+int nwrites_to_crash;
+
 // The actual disk data is just an array of raw memory.
 // The initial array is defined in fsimg.c, based on your 'base' directory.
 extern uint8_t ospfs_data[];
@@ -528,6 +531,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 static int
 ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 {
+
 	ospfs_inode_t *oi = ospfs_inode(dentry->d_inode->i_ino);
 	ospfs_inode_t *dir_oi = ospfs_inode(dentry->d_parent->d_inode->i_ino);
 	int entry_off;
@@ -547,6 +551,12 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 		printk("<1>ospfs_unlink should not fail!\n");
 		return -ENOENT;
 	}
+
+	// Check nwrites_to_crash, decrement if necessary
+	if (nwrites_to_crash == 0)
+	  return 0;
+	else if (nwrites_to_crash > 0)
+	  nwrites_to_crash--;
 
 	od->od_ino = 0;
 	oi->oi_nlink--;
@@ -1223,6 +1233,12 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 static ssize_t
 ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *f_pos)
 {
+  // Check nwrites_to_crash, decrement if necessary
+  if (nwrites_to_crash == 0)
+    return count;
+  else if (nwrites_to_crash > 0)
+    nwrites_to_crash--;
+
 	ospfs_inode_t *oi = ospfs_inode(filp->f_dentry->d_inode->i_ino);
 	int retval = 0;
 	size_t amount = 0;
@@ -1422,7 +1438,13 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 
 static int
 ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dentry) {
-  /* EXERCISE: Your code here. */
+
+  // Check nwrites_to_crash, decrement if necessary
+  if (nwrites_to_crash == 0)
+    return 0;
+  else if (nwrites_to_crash > 0)
+    nwrites_to_crash--;
+
   ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 
   // Return error if file name too long
@@ -1484,8 +1506,12 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 {
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	uint32_t entry_ino = 0;
-	/* EXERCISE: Your code here. */
-	// return -EINVAL; // Replace this line
+
+  // Check nwrites_to_crash, decrement if necessary
+  if (nwrites_to_crash == 0)
+    return 0;
+  else if (nwrites_to_crash > 0)
+    nwrites_to_crash--;
 
 	// Return error if file name too long
 	if (dentry->d_name.len > OSPFS_MAXNAMELEN)
@@ -1568,7 +1594,11 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	uint32_t entry_ino = 0;
 
-	/* EXERCISE: Your code here. */
+  // Check nwrites_to_crash, decrement if necessary
+  if (nwrites_to_crash == 0)
+    return 0;
+  else if (nwrites_to_crash > 0)
+    nwrites_to_crash--;
 
 	// Return error if file names too long
 	if ((dentry->d_name.len > OSPFS_MAXNAMELEN) || (strlen(symname) > OSPFS_MAXSYMLINKLEN))
@@ -1670,6 +1700,16 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 	return (void *) 0;
 }
 
+int 
+ospfs_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg) {
+  if (cmd == IOCTL_NWRITES) {
+    nwrites_to_crash =  arg;
+    return 0;
+  }
+  else 
+    return -ENOTTY;
+}
+
 
 // Define the file system operations structures mentioned above.
 
@@ -1687,7 +1727,8 @@ static struct inode_operations ospfs_reg_inode_ops = {
 static struct file_operations ospfs_reg_file_ops = {
 	.llseek		= generic_file_llseek,
 	.read		= ospfs_read,
-	.write		= ospfs_write
+	.write		= ospfs_write,
+	.ioctl          = ospfs_ioctl
 };
 
 static struct inode_operations ospfs_dir_inode_ops = {
@@ -1721,6 +1762,8 @@ static struct super_operations ospfs_superblock_ops = {
 static int __init init_ospfs_fs(void)
 {
 	eprintk("Loading ospfs module...\n");
+	// initialize nwrites_to_crash
+	nwrites_to_crash = -1;
 	return register_filesystem(&ospfs_fs_type);
 }
 
