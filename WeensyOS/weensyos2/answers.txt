@@ -1,0 +1,68 @@
+Name: Leslie Lam
+UCLA ID: 804302387
+
+Collaborators:
+
+-------------------------------------------------------------------------------
+
+Response to Exercise 1:
+
+The name of the scheduling algorithm is:
+Round Robin
+
+(Exercise 2 is a coding exercise)
+schedos-kern.c: Line 212
+
+Response to Exercise 3:
+Average turnaround time for scheduling_algorithm 0: 1278.5 ms
+[(320 + 319*3) + (320 + 319*3 + 1) + (320 + 319*3 + 2) + (320 + 319*3 + 3)] / 4
+
+Average turnaround time for scheduling_algorithm 1: 800 ms
+(320 + 320*2 + 320*3 + 320*4) / 4
+
+
+Average wait time for scheduling_algorithm 0: 1.5 ms
+(0 + 1 + 2 + 3) / 4
+
+Average wait time for scheduling_algorithm 1: 480 ms
+(0 + 320 + 320*2 + 320*3) / 4
+
+
+Exercise 4:
+Did you complete Exercise 4A, Exercise 4B, or both for extra credit?
+Both
+Exercise 4A:
+schedos.h: Line 17
+schedos-kern.h: Line 33
+schedos-app.h: Line 72
+schedos-kern.c: Line 151, 223
+
+Exercise 4B: 
+schedos.h: Line 18
+schedos-kern.h: Line 34
+schedos-app.h: Line 88
+schedos-kern.c: Line 156, 250
+
+
+Exercise 5:
+The fifth iteration of Process 4 was interrupted. So the sequence skips
+the fifth printing of 4, resulting in the following:
+1234 1234 1234 1234 1231
+
+(Exercise 6 is a coding exercise)
+schedos.h: Line 19
+schedos-app.h: Line 104
+schedos-kern.c: Line 161
+schedos-1.c: Line 32
+
+Anything else you'd like us to know:
+
+
+Extra credit exercises:
+Exercise 8:
+schedos.h: Line 24
+schedos-symbols.ld: Line 6
+schedos-1.c: Line 37
+
+Introduced a new lock variable.
+Define preprocessor LOCKED_WRITE in schedos-1.c to use
