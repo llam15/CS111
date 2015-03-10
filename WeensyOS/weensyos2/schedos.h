@@ -17,7 +17,7 @@
 #define INT_SYS_PRIORITY       	50
 #define INT_SYS_SHARE		51
 #define INT_SYS_WRITE           52
-
+#define INT_SYS_QUEUE           53
 // The current screen cursor position (stored at memory location 0x198000).
 
 extern uint16_t * volatile cursorpos;

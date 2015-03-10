@@ -48,6 +48,7 @@ process_t *current;
 
 // The preferred scheduling algorithm.
 int scheduling_algorithm;
+int multi_level_queue;
 
 /*****************************************************************************
  * start
@@ -75,6 +76,12 @@ start(void)
 		proc_array[i].p_share_runs = 0;
 	}
 
+	// SETTING QUEUE NUMBERS FOR MULTI-LEVEL QUEUE SCHEDULING
+	proc_array[1].p_queue = 0;
+	proc_array[2].p_queue = 1;
+	proc_array[3].p_queue = 0;
+	proc_array[4].p_queue = 1;
+
 	// Set up process descriptors (the proc_array[])
 	for (i = 1; i < NPROCS; i++) {
 		process_t *proc = &proc_array[i];
@@ -99,7 +106,7 @@ start(void)
 
 	// Initialize the scheduling algorithm.
 	scheduling_algorithm = 0;
-
+	multi_level_queue = (scheduling_algorithm == 4) ? 1 : 0;
 	// Switch to the first process.
 	proc_array[1].p_share_runs++;
 	run(&proc_array[1]);
@@ -159,8 +166,14 @@ interrupt(registers_t *reg)
 		run(current);
 
 	case INT_SYS_WRITE:
+	        // Write character and increment cursor position
 		*cursorpos++ = reg->reg_eax;
 		run(current);
+
+	case INT_SYS_QUEUE:
+	        // Set process's queue to number in %eax register
+	        current->p_queue = reg->reg_eax;
+	        run(current);
 
 	case INT_CLOCK:
 		// A clock interrupt occurred (so an application exhausted its
@@ -171,7 +184,6 @@ interrupt(registers_t *reg)
 	default:
 		while (1)
 			/* do nothing */;
-
 	}
 }
 
@@ -203,8 +215,14 @@ schedule(void)
       // Run the selected process, but skip
       // non-runnable processes.
       // Note that the 'run' function does not return.
-      if (proc_array[pid].p_state == P_RUNNABLE)
+      if (proc_array[pid].p_state == P_RUNNABLE) {
+	// If was redirected from multi-level queue scheduling,
+	// change scheduling algorithm back to 4
+	if (multi_level_queue)
+	  scheduling_algorithm = 4;
+
 	run(&proc_array[pid]);
+      }
     }
   }
 
@@ -213,8 +231,14 @@ schedule(void)
     // Find runnable process with highest priority and run it
     while (1) {
       for (pid = 1; pid < NPROCS; pid++) {
-	if (proc_array[pid].p_state == P_RUNNABLE)
+	if (proc_array[pid].p_state == P_RUNNABLE) {
+	  // If was redirected from multi-level queue scheduling,
+	  // change scheduling algorithm back to 4
+	  if (multi_level_queue)
+	    scheduling_algorithm = 4;
+
 	  run(&proc_array[pid]);
+	}
       }
     }
   }
@@ -223,13 +247,15 @@ schedule(void)
   else if (scheduling_algorithm == 2) {
     // Find highest priority in list, because starting process
     // will not necessarily start at the highest priority.
-    int smallest = proc_array[current->p_pid].p_priority;
-
+    pid_t i = pid;
     // Do not include current process if it has exited
-    if (current->p_state != P_RUNNABLE)
-      smallest = proc_array[current->p_pid + 1].p_priority;
+    while (proc_array[pid].p_state == P_ZOMBIE ||
+	   proc_array[pid].p_state == P_EMPTY)
 
-    pid_t i;
+      i = (i+1) % NPROCS;
+
+    int smallest = proc_array[i].p_priority;
+
     for (i = 1; i < NPROCS; i++) {
       if (proc_array[i].p_state == P_RUNNABLE && 
 	  proc_array[i].p_priority < smallest)
@@ -241,8 +267,9 @@ schedule(void)
       pid = (pid + 1) % NPROCS;
 
       if (proc_array[pid].p_state == P_RUNNABLE && 
-	  proc_array[pid].p_priority <= smallest)
+	  proc_array[pid].p_priority <= smallest) {
 	run(&proc_array[pid]);
+      }
     }
   }
 
@@ -265,8 +292,48 @@ schedule(void)
     }    
   }
 
-  // If we get here, we are running an unknown scheduling algorithm.
-  cursorpos = console_printf(cursorpos, 0x100, "\nUnknown scheduling algorithm %d\n", scheduling_algorithm);
+  else if (scheduling_algorithm == 4) {
+    // Do not include current process if it has exited
+    while (proc_array[pid].p_state == P_ZOMBIE ||
+	   proc_array[pid].p_state == P_EMPTY)
+      pid = (pid + 1) % NPROCS;
+      
+    int smallest = proc_array[pid].p_queue;
+
+    // Find highest priority queue number
+    pid_t i;
+    for (i = 1; i < NPROCS; i++) {
+      if (proc_array[i].p_state == P_BLOCKED)
+	proc_array[i].p_state = P_RUNNABLE;
+
+      if (proc_array[i].p_state == P_RUNNABLE && 
+	  proc_array[i].p_queue < smallest)
+	smallest = proc_array[i].p_queue;
+    }
+
+    // Block processes not in current queue number
+    for (i = 1; i < NPROCS; i++) {
+      if (proc_array[i].p_state == P_RUNNABLE && 
+	  proc_array[i].p_queue != smallest)
+	proc_array[i].p_state = P_BLOCKED;
+    }
+
+    // Only valid queue numbers are 0 and 1.
+    if (smallest == 0 || smallest == 1) {
+      // Scheduling algorithm 0 for queue level 0, and 1 for queue level 1
+      scheduling_algorithm = smallest;
+      schedule();
+    }
+
+    // If scheduling algorithm is 4 and we get here, must have invalid queue number
+    cursorpos = console_printf(cursorpos, 0x100, "\nInvalid queue number: %d\n", smallest);
+  }
+
+  else {
+    // If we get here, we are running an unknown scheduling algorithm.
+    cursorpos = console_printf(cursorpos, 0x100, "\nUnknown scheduling algorithm %d\n", scheduling_algorithm);
+  }
+
   while (1)
     /* do nothing */;
 }

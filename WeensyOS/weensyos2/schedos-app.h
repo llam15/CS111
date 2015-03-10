@@ -109,4 +109,21 @@ sys_write(uint16_t c)
 		         "a" (c)
 		     : "cc", "memory");
 }
+
+/*****************************************************************************
+ * sys_set_queue
+ *
+ *   Set process's queue number
+ *
+ *****************************************************************************/
+
+static inline void
+sys_set_queue(int q)
+{
+	asm volatile("int %0\n"
+		     : : "i" (INT_SYS_QUEUE),
+		         "a" (q)
+		     : "cc", "memory");
+}
+
 #endif

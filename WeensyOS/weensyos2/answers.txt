@@ -1,7 +1,7 @@
 Name: Leslie Lam
 UCLA ID: 804302387
 
-Collaborators:
+Collaborators: Lynn Hao Tran, Stella Chung
 
 -------------------------------------------------------------------------------
 
@@ -20,7 +20,6 @@ Average turnaround time for scheduling_algorithm 0: 1278.5 ms
 Average turnaround time for scheduling_algorithm 1: 800 ms
 (320 + 320*2 + 320*3 + 320*4) / 4
 
-
 Average wait time for scheduling_algorithm 0: 1.5 ms
 (0 + 1 + 2 + 3) / 4
 
@@ -35,13 +34,13 @@ Exercise 4A:
 schedos.h: Line 17
 schedos-kern.h: Line 33
 schedos-app.h: Line 72
-schedos-kern.c: Line 151, 223
+schedos-kern.c: Line 158, 230
 
 Exercise 4B: 
 schedos.h: Line 18
 schedos-kern.h: Line 34
 schedos-app.h: Line 88
-schedos-kern.c: Line 156, 250
+schedos-kern.c: Line 163, 247
 
 
 Exercise 5:
@@ -52,13 +51,28 @@ the fifth printing of 4, resulting in the following:
 (Exercise 6 is a coding exercise)
 schedos.h: Line 19
 schedos-app.h: Line 104
-schedos-kern.c: Line 161
+schedos-kern.c: Line 168
 schedos-1.c: Line 32
 
 Anything else you'd like us to know:
 
 
 Extra credit exercises:
+Exercise 7:
+schedos.h: Line 20
+schedos-kern.h: Line 36
+schedos-app.h: Line 120
+schedos-kern.c: Line 51, 80, 109, 173, 221, 237, 295
+
+The multi-level queue contains two levels: Level 0 and Level 1.
+Level 0 uses scheduling algorithm 0 (Round-Robin)
+Level 1 uses scheduling algorithm 1 (PID-based Priority)
+I implemented a system call called sys_set_queue, allowing
+the process to set its queue number. This number needs to be set
+before calling run and schedule. 
+If a process has an invalid queue number, it will never run, and
+an error message will be printed at the end.
+
 Exercise 8:
 schedos.h: Line 24
 schedos-symbols.ld: Line 6
