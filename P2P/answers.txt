@@ -124,11 +124,19 @@ result, the download and uploads executed in parallel.
    overflow and the target will seg fault.
 
 3. Security Attack
-   If evil_mode ==3, then it will seek out a peer by requesting to download
+   If evil_mode == 3, then it will seek out a peer by requesting to download
    a file that peer has. Then, after connecting, it will send a GET request
    for the file /etc/passwd. This attack attempts to steal possibly important
    information from the target. 
-   
+
+4. Continuous Data Attack
+   If evil_mode == 4, then it will attack any users attempting to download from
+   it. This is a downloader attack, as it only attacks users actively
+   connecting with it. This evil mode, instead of breaking when it reaches
+   the end of the file, it will set the seek back to the beginning of the
+   file and continue sending the file. Essentially, it takes the same file
+   and sends it repeatedly to fill up the target's disk.
+
 # Extra credit problems
 #Extra credit problem: none
 

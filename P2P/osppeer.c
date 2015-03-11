@@ -785,20 +785,30 @@ static void task_upload(task_t *t)
 
 	message("* Transferring file %s\n", t->filename);
 	// Now, read file from disk and write it to the requesting peer.
+	// EVIL MODE 4: CONTINUOUS DATA
 	while (1) {
 		int ret = write_from_taskbuf(t->peer_fd, t);
 		if (ret == TBUF_ERROR) {
+		        if (evil_mode == 4)
+			  message("* Attack Success!\n");
 			error("* Peer write error\n");
 			goto exit;
 		}
-
+		
 		ret = read_to_taskbuf(t->disk_fd, t);
 		if (ret == TBUF_ERROR) {
 			error("* Disk read error\n");
 			goto exit;
-		} else if (ret == TBUF_END && t->head == t->tail)
-			/* End of file */
-			break;
+		} else if (ret == TBUF_END && t->head == t->tail){
+		        // Don't break if evil, just set seek to beginning
+		        // Thus sending data continuously, never ending
+		        if (evil_mode == 4) {
+			  lseek(t->disk_fd, 0, SEEK_SET);
+			}
+		        /* End of file */
+			else
+			  break;
+		}
 	}
 
 	message("* Upload of %s complete\n", t->filename);
@@ -894,12 +904,14 @@ int main(int argc, char *argv[])
 	    int pid = fork();
 	    if (pid < 0) {
 	      error("* Error: Failed to fork while downloading.\n");
-	      task_free(t);
 	    }
 	    else if (pid == 0) {
 	      task_download(t, tracker_task);
 	      exit(0);
 	    }
+
+	    // Close file descriptor in parent
+	    task_free(t);
 	  }
 
 	int num_req = 1;
@@ -910,12 +922,15 @@ int main(int argc, char *argv[])
 	    int pid = fork();
 	    if (pid < 0) {
 	      error("* Error: Failed to fork while uploading.\n");
-	      task_free(t);
 	    }
 	    else if (pid == 0) {
 	      task_upload(t);
 	      exit(0);
 	    }
+    
+	    // Close file descriptor in parent
+	    task_free(t);
+
 	    // To counteract DOS attacks, make wait for processes to finish
 	    // before spawning another if processes exceed 100
 	    if (num_req > 100) {
