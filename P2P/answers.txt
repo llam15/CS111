@@ -117,12 +117,18 @@ result, the download and uploads executed in parallel.
    seeks out a peer with a valid file, connects to it, and then attacks. 
 
 2. Buffer Overflow Attack
-   If evil_mode == 2, then it will seek out a peer by requestion to download
+   If evil_mode == 2, then it will seek out a peer by requesting to download
    a file that peer has. Then, after connecting, it will send a GET request
    with a file name 8 times longer than the maximum (FILENAMESIZ * 8). If the
    target does not check for buffer overrun, then this will cause buffer
    overflow and the target will seg fault.
 
+3. Security Attack
+   If evil_mode ==3, then it will seek out a peer by requesting to download
+   a file that peer has. Then, after connecting, it will send a GET request
+   for the file /etc/passwd. This attack attempts to steal possibly important
+   information from the target. 
+   
 # Extra credit problems
 #Extra credit problem: none
 

