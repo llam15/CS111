@@ -25,14 +25,94 @@ Email:
 # EXERCISE 1: What method you used to make your peer download and upload
 #    files in parallel?  (~1-3 sentences)
 
+I made my peer download and upload files in parallel by forking. The parent
+would continuously spawn children to execute downloads and uploads. As a
+result, the download and uploads executed in parallel.
+
 # EXERCISE 2A: What conditions did you find and fix that would have
 #    triggered a buffer overrun bug?  (~1-3 sentences each)
 
+1. strcpy() in start_download
+   I changed the strcpy from filename to t->filename
+   in start_download to memcpy, which allowed me to
+   specify the number of characters to copy into the buffer.
+   I copied FILENAMESIZ-1, and set the last character to a null. With the
+   original strcpy, the buffer could have been overrun if the filename
+   was longer than FILENAMESIZ.
+
+2. strcpy() in task_download
+   I changed the strcpy from t->filename to t->disk_filename to strncpy,
+   which allowed me to specify the number of characters to copy into the
+   buffer. This time I copied the entire FILENAMESIZ, because start_download
+   ensures that the last character will be a null byte.
+   
 # EXERCISE 2B: What other robustness problems did you fix?  (~1-3 sentences
 #    each)
 
+1. Bad Files (File Name Too Long)
+   I checked if the file name being requested was too long.
+   (In start_download, task_upload)
+   
+2. Bad Files (Files Outside Current Directory)
+   I checked if the file being requested was outside of the current
+   directory by checking if the beginning of its absolute path was the
+   same as the beginning of the absolute path of my current working
+   directory. I obtained the absolute path of the file with realpath(),
+   and I obtained the current working directory with get_current_dir_name().
+   (In task_upload).
+
+3. Zero Out New File Names
+   In task_new, I replaced the strcpy() with strncpy(...,"",FILENAMESIZ)
+   in order to clear out all the bytes in the buffers. The original only
+   set the first byte to a null byte, leaving a bunch of junk afterwards.
+   This could be a robustness issue because junk values could possibly be
+   accessed.
+
+4. Zero Out Disk File Name in task_pop_peer
+   In task_pop_peer, instead of only setting the first byte to a null byte,
+   I used strncpy(t->disk_filename, "", FILENAMESIZ) to clear out all of
+   the bytes in t->disk_filename.
+
+5. Time Out Slow Peers
+   In task_download, I recorded the number of bytes read after each call
+   to read_to_taskbuf. I collected them in an array of 10 (MAX_SAMPLES)
+   unsigned ints. After each read, I checked the average of all these
+   samples. If the average was less than 32 (MIN_RATE), then I threw an
+   error and continued to the next peer. While this may occasionally
+   weed out peers that are not malicious and simply slow, it prevents
+   intentionally slow peers from taking up too much CPU time. 
+
+6. Time Out Overly Large Files
+   In task_download, I kept track of the total number of bytes read from
+   the peer. If this file exceeded MAX_FILE_SIZE, then I threw an
+   error and continued to the next peer. This prevents malicious peers
+   from intentionally trying to fill up the disk with junk data. I set
+   MAX_FILE_SIZE to be TASKBUFSIZ * FILENAMESIZ, which ended up being
+   about 8 MB.
+
+7. Increase TASKBUFSIZ
+   Because TASKBUFSIZ is only 4096, this is not enough to handle a large
+   number of peers, such the number of peers in make run-popular. To solve
+   this issue, I increased TASBUFSIZ by eight times to 32768.
+
 # EXERCISE 3: Describe the attacks you implemented for "evil mode".  Why
 #    are they attacks?  (~3-10 sentences each)
+
+1. DOS Attack
+   If evil_mode == 1, then it will seek out a peer by requesting to download
+   a file that peer has. However, instead of only requesting it once, it will
+   repeatedly request that file until the peer crashes. This forces
+   the peer to expend a lot of time servicing these repeat requests.
+   Eventually, it can fill up their buffer and cause them to disconnect
+   from the server. This is a downloader attack, because it
+   seeks out a peer with a valid file, connects to it, and then attacks. 
+
+2. Buffer Overflow Attack
+   If evil_mode == 2, then it will seek out a peer by requestion to download
+   a file that peer has. Then, after connecting, it will send a GET request
+   with a file name 8 times longer than the maximum (FILENAMESIZ * 8). If the
+   target does not check for buffer overrun, then this will cause buffer
+   overflow and the target will seg fault.
 
 # Extra credit problems
 #Extra credit problem: none
