@@ -95,6 +95,15 @@ result, the download and uploads executed in parallel.
    number of peers, such the number of peers in make run-popular. To solve
    this issue, I increased TASBUFSIZ by eight times to 32768.
 
+8. Counteract DOS Attacks
+   DOS attacks work by sending a stream of requests to flood and overload the
+   target peer. The target will continue to fork until it is unable, and it
+   will open connections until there are too many files open, causing it to
+   crash. In order to counteract this sort of attack, I kept track of the
+   number of upload requests. If the number exceeds 100, then I will wait
+   for a process to finish before spawning a new process. This ensures that
+   I will not overuse my resources.
+
 # EXERCISE 3: Describe the attacks you implemented for "evil mode".  Why
 #    are they attacks?  (~3-10 sentences each)
 

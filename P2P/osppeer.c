@@ -22,6 +22,7 @@
 #include <limits.h>
 #include "md5.h"
 #include "osp2p.h"
+#include <sys/wait.h>
 
 int evil_mode;			// nonzero iff this peer should behave badly
 
@@ -892,9 +893,11 @@ int main(int argc, char *argv[])
 	    }
 	  }
 
+	int num_req = 1;
 	// Then accept connections from other peers and upload files to them!
 	while ((t = task_listen(listen_task))) {
-	    // Fork and upload in child, so can upload in parallel
+	  num_req++;
+	  // Fork and upload in child, so can upload in parallel
 	    int pid = fork();
 	    if (pid < 0) {
 	      error("* Error: Failed to fork while uploading.\n");
@@ -903,6 +906,12 @@ int main(int argc, char *argv[])
 	    else if (pid == 0) {
 	      task_upload(t);
 	      exit(0);
+	    }
+	    // To counteract DOS attacks, make wait for processes to finish
+	    // before spawning another if processes exceed 100
+	    if (num_req > 100) {
+	      wait(NULL);
+	      num_req--;
 	    }
 	}
 
